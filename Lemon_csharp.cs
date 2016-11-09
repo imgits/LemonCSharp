@@ -1,10 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Diagnostics;
-
 
 /*
 ** This file contains all sources (including headers) to the LEMON
@@ -14,6 +9,20 @@ using System.Diagnostics;
 **
 ** The author of this program disclaims copyright.
 */
+
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISSPACE(X) isspace((unsigned char)(X))
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISDIGIT(X) isdigit((unsigned char)(X))
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISALNUM(X) isalnum((unsigned char)(X))
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISALPHA(X) isalpha((unsigned char)(X))
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISUPPER(X) isupper((unsigned char)(X))
+//C++ TO C# CONVERTER NOTE: The following #define macro was replaced in-line:
+//ORIGINAL LINE: #define ISLOWER(X) islower((unsigned char)(X))
+
 
 #if ! __WIN32__
 #if _WIN32 || WIN32
@@ -88,7 +97,8 @@ public class symbol
     public int useCnt; // Number of times used
     public string destructor; /* Code which executes whenever this symbol is
 							 ** popped from the stack during error processing */
-    public int destLineno; // Line number for start of destructor
+    public int destLineno; /* Line number for start of destructor.  Set to
+							 ** -1 for duplicate destructors. */
     public string datatype; /* The data type of information held by this
 							 ** object. Only used if type==NONTERMINAL */
     public int dtnum; /* The data type number.  In the parser, the value
@@ -112,9 +122,15 @@ public class rule
     public readonly string[] rhsalias; // An alias for each RHS symbol (NULL if none)
     public int line; // Line number at which code begins
     public readonly string code; // The code executed when this rule is reduced
+    public readonly string codePrefix; // Setup code before code[] above
+    public readonly string codeSuffix; // Breakdown code after code[] above
+    public int noCode; // True if this rule has no associated C code
+    public int codeEmitted; // True if the code has been emitted already
     public symbol precsym; // Precedence symbol for this rule
     public int index; // An index number for this rule
+    public int iRule; // Rule number as used in the generated tables
     public Boolean canReduce; // True if this rule is ever reduced
+    public Boolean doesReduce; // Reduce actions occur after optimization
     public rule nextlhs; // Next rule with the same LHS
     public rule next; // Next rule in the global list
 }
@@ -153,7 +169,8 @@ public enum e_action
     RRCONFLICT, // Was a reduce, but part of a conflict
     SH_RESOLVED, // Was a shift.  Precedence resolved conflict
     RD_RESOLVED, // Was reduce.  Precedence resolved conflict
-    NOT_USED // Deleted by compression
+    NOT_USED, // Deleted by compression
+    SHIFTREDUCE // Shift first, then reduce
 }
 
 /* Every shift or reduce operation is stored as one of the following */
@@ -170,6 +187,7 @@ public class action
         public rule[] rp; // The rule, if a reduce
     }
     public AnonymousStruct x = new AnonymousStruct();
+    public symbol spOpt; // SHIFTREDUCE optimization to this symbol
     public action next; // Next action for this state
     public action collide; // Next action with the same hash
 }
@@ -181,12 +199,14 @@ public class state
     public config bp; // The basis configurations for this state
     public config cfp; // All configurations in this set
     public int statenum; // Sequential number for this state
-    public action ap; // Array of actions for this state
+    public action ap; // List of actions for this state
     public int nTknAct; // Number of actions on terminals and nonterminals
     public int nNtAct;
     public int iTknOfst; // yy_action[] offset for terminals and nonterms
     public int iNtOfst;
-    public int iDflt; // Default action
+    public int iDfltReduce; // Default action is to REDUCE by this rule
+    public rule pDfltReduce; // The default REDUCE rule.
+    public int autoReduce; // True if this is an auto-reduce state
 }
 
 /* A followset propagation link indicates that the contents of one
@@ -206,7 +226,9 @@ public class lemon
 {
     public state[] sorted; // Table of states sorted by state number
     public rule rule; // List of all rules
+    public rule startRule; // First rule
     public int nstate; // Number of states
+    public int nxstate; // nstate with tail degenerate states removed
     public int nrule; // Number of rules
     public int nsymbol; // Number of terminal and nonterminal symbols
     public int nterminal; // Number of terminal symbols
@@ -232,7 +254,8 @@ public class lemon
     public string outname; // Name of the current output file
     public string tokenprefix; // A prefix added to token names in the .h file
     public int nconflict; // Number of parsing conflicts
-    public int tablesize; // Size of the parse tables
+    public int nactiontab; // Number of entries in the yy_action[] table
+    public int tablesize; // Total table size of all tables in bytes
     public int basisflag; // Print only basis configurations
     public int has_fallback; // True if any %fallback is seen in the grammar
     public int nolinenosflag; // True if #line statements should not be printed
@@ -296,7 +319,7 @@ public enum e_state
     WAITING_FOR_ARROW,
     IN_RHS,
     LHS_ALIAS_1,
-    LHS_ALIAS_2, 
+    LHS_ALIAS_2,
     LHS_ALIAS_3,
     RHS_ALIAS_1,
     RHS_ALIAS_2,
@@ -469,7 +492,7 @@ public static class GlobalMembers
         string ep;
         string[] set = new string[DefineConstants.LISTSIZE];
         int i;
-        offset = (uint)next - (uint)list;
+        offset = (uint)((string)next - (string)list);
         for (i = 0; i < DefineConstants.LISTSIZE; i++)
         {
             set[i] = 0;
@@ -510,7 +533,7 @@ public static class GlobalMembers
 	** saying they are unsafe.  So we define our own versions of those routines too.
 	**
 	** There are three routines here:  lemon_sprintf(), lemon_vsprintf(), and
-	** lemon_addtext().  The first two are replacements for sprintf() and vsprintf().
+	** lemon_addtext(). The first two are replacements for sprintf() and vsprintf().
 	** The third is a helper routine for vsnprintf() that adds texts to the end of a
 	** buffer, making sure the buffer is always zero-terminated.
 	**
@@ -567,13 +590,13 @@ public static class GlobalMembers
                 int iWidth = 0;
                 lemon_addtext(ref str, nUsed, zFormat[j], i - j, 0);
                 c = zFormat[++i];
-                if (char.IsDigit(c) || (c == '-' && char.IsDigit(zFormat[i + 1])))
+                if (char.IsDigit((byte)(c)) || (c == '-' && char.IsDigit((byte)(zFormat[i + 1]))))
                 {
                     if (c == '-')
                     {
                         i++;
                     }
-                    while (char.IsDigit(zFormat[i]))
+                    while (char.IsDigit((byte)(zFormat[i])))
                     {
                         iWidth = iWidth * 10 + zFormat[i++] - '0';
                     }
@@ -1062,15 +1085,15 @@ public static void OptPrint()
                 break;
             case option_type.OPT_INT:
             case option_type.OPT_FINT:
-                fprintf(errstream, "  %s=<integer>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 9), "", op[i].message);
+                fprintf(errstream, "  -%s<integer>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 9), "", op[i].message);
                 break;
             case option_type.OPT_DBL:
             case option_type.OPT_FDBL:
-                fprintf(errstream, "  %s=<real>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 6), "", op[i].message);
+                fprintf(errstream, "  -%s<real>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 6), "", op[i].message);
                 break;
             case option_type.OPT_STR:
             case option_type.OPT_FSTR:
-                fprintf(errstream, "  %s=<string>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 8), "", op[i].message);
+                fprintf(errstream, "  -%s<string>%*s  %s\n", op[i].label, (int)(max - ((int)Convert.ToString(op[i].label).Length) - 8), "", op[i].message);
                 break;
         }
     }
@@ -1088,7 +1111,7 @@ public static void Parse(lemon gp)
     pstate ps = new pstate();
     FILE fp;
     string filebuf;
-    int filesize;
+    uint filesize;
     int lineno;
     int c;
     string cp;
@@ -1147,7 +1170,7 @@ public static void Parse(lemon gp)
         {
             lineno++; // Keep track of the line number
         }
-        if (char.IsWhiteSpace(c))
+        if (char.IsWhiteSpace((byte)(c)))
         {
             cp = cp.Substring(1);
             continue;
@@ -1281,9 +1304,9 @@ public static void Parse(lemon gp)
                 nextcp = cp.Substring(1);
             }
         }
-        else if (char.IsLetterOrDigit(c))
+        else if (char.IsLetterOrDigit((byte)(c)))
         { // Identifiers
-            while ((c = cp) != 0 && (char.IsLetterOrDigit(c) || c == '_'))
+            while ((c = cp) != 0 && (char.IsLetterOrDigit((byte)(c)) || c == '_'))
             {
                 cp = cp.Substring(1);
             }
@@ -1294,10 +1317,10 @@ public static void Parse(lemon gp)
             cp += 3;
             nextcp = cp;
         }
-        else if ((c == '/' || c == '|') && char.IsLetter(cp[1]))
+        else if ((c == '/' || c == '|') && char.IsLetter((byte)(cp[1])))
         {
             cp += 2;
-            while ((c = cp) != 0 && (char.IsLetterOrDigit(c) || c == '_'))
+            while ((c = cp) != 0 && (char.IsLetterOrDigit((byte)(c)) || c == '_'))
             {
                 cp = cp.Substring(1);
             }
@@ -1311,7 +1334,7 @@ public static void Parse(lemon gp)
         c = cp;
         cp = 0; // Null terminate the token
         parseonetoken(ps); // Parse the token
-        cp = c; // Restore the buffer
+        cp = (sbyte)c; // Restore the buffer
         cp = nextcp;
     }
     //C++ TO C# CONVERTER TODO TASK: The memory management function 'free' has no equivalent in C#:
@@ -1470,7 +1493,7 @@ public static void Reprint(lemon lemp)
     }
 }
 
-/* Generate the "y.output" log file */
+/* Generate the "*.out" log file */
 public static void ReportOutput(lemon lemp)
 {
     int i;
@@ -1484,7 +1507,7 @@ public static void ReportOutput(lemon lemp)
     {
         return;
     }
-    for (i = 0; i < lemp.nstate; i++)
+    for (i = 0; i < lemp.nxstate; i++)
     {
         stp = lemp.sorted[i];
         fprintf(fp, "State %d:\n", stp.statenum);
@@ -1501,7 +1524,7 @@ public static void ReportOutput(lemon lemp)
             string buf = new string(new char[20]);
             if (cfp.dot == cfp.rp.nrhs)
             {
-                lemon_sprintf(ref buf, "(%d)", cfp.rp.index);
+                lemon_sprintf(ref buf, "(%d)", cfp.rp.iRule);
                 fprintf(fp, "    %5s ", buf);
             }
             else
@@ -1511,9 +1534,9 @@ public static void ReportOutput(lemon lemp)
             ConfigPrint(fp, cfp);
             fprintf(fp, "\n");
 #if false
-	//			SetPrint(fp,cfp->fws,lemp);
-	//			PlinkPrint(fp,cfp->fplp,"To  ");
-	//			PlinkPrint(fp,cfp->bplp,"From");
+	//			SetPrint(fp, cfp->fws, lemp);
+	//			PlinkPrint(fp, cfp->fplp, "To  ");
+	//			PlinkPrint(fp, cfp->bplp, "From");
 #endif
             if (lemp.basisflag != 0)
             {
@@ -1578,6 +1601,9 @@ public static void ReportTable(lemon lemp, int mhflag)
     int i;
     int j;
     int n;
+    int sz;
+    int szActionType; // sizeof(YYACTIONTYPE)
+    int szCodeType; // sizeof(YYCODETYPE)
     string name;
     int mnTknOfst;
     int mxTknOfst;
@@ -1590,7 +1616,7 @@ public static void ReportTable(lemon lemp, int mhflag)
 		{
         return;
     }
-    @out = file_open(lemp, ".cpp", "wb");
+    @out = file_open(lemp, ".c", "wb");
     if (@out == 0)
     {
         fclose(in);
@@ -1604,12 +1630,12 @@ public static void ReportTable(lemon lemp, int mhflag)
     if (mhflag != 0)
     {
         //C++ TO C# CONVERTER TODO TASK: C# does not have an equivalent to pointers to value types:
-        //ORIGINAL LINE: sbyte *name = file_makename(lemp, ".h");
-        sbyte name = file_makename(lemp, ".h");
-        fprintf(@out, "#include \"%s\"\n", name);
+        //ORIGINAL LINE: sbyte *incName = file_makename(lemp, ".h");
+        sbyte incName = file_makename(lemp, ".h");
+        fprintf(@out, "#include \"%s\"\n", incName);
         lineno++;
         //C++ TO C# CONVERTER TODO TASK: The memory management function 'free' has no equivalent in C#:
-        free(name);
+        free(incName);
     }
     tplt_xfer(ref lemp.name, in, @out, ref lineno);
 
@@ -1638,11 +1664,11 @@ public static void ReportTable(lemon lemp, int mhflag)
     tplt_xfer(ref lemp.name, in, @out, ref lineno);
 
     /* Generate the defines */
-    fprintf(@out, "#define YYCODETYPE %s\n", minimum_size_type(0, lemp.nsymbol + 1));
+    fprintf(@out, "#define YYCODETYPE %s\n", minimum_size_type(0, lemp.nsymbol + 1, ref szCodeType));
     lineno++;
     fprintf(@out, "#define YYNOCODE %d\n", lemp.nsymbol + 1);
     lineno++;
-    fprintf(@out, "#define YYACTIONTYPE %s\n", minimum_size_type(0, lemp.nstate + lemp.nrule + 5));
+    fprintf(@out, "#define YYACTIONTYPE %s\n", minimum_size_type(0, lemp.nstate + lemp.nrule * 2 + 5, ref szActionType));
     lineno++;
     if (lemp.wildcard != null)
     {
@@ -1672,13 +1698,12 @@ public static void ReportTable(lemon lemp, int mhflag)
     name = lemp.name != 0 ? lemp.name : "Parse";
     if (lemp.arg != 0 && lemp.arg[0])
     {
-        int i;
         i = ((int)lemp.arg.Length);
-        while (i >= 1 && char.IsWhiteSpace(lemp.arg[i - 1]))
+        while (i >= 1 && char.IsWhiteSpace((byte)(lemp.arg[i - 1])))
         {
             i--;
         }
-        while (i >= 1 && (char.IsLetterOrDigit(lemp.arg[i - 1]) || lemp.arg[i - 1] == '_'))
+        while (i >= 1 && (char.IsLetterOrDigit((byte)(lemp.arg[i - 1])) || lemp.arg[i - 1] == '_'))
         {
             i--;
         }
@@ -1707,10 +1732,6 @@ public static void ReportTable(lemon lemp, int mhflag)
         fprintf(@out, "#endif\n");
         lineno++;
     }
-    fprintf(@out, "#define YYNSTATE %d\n", lemp.nstate);
-    lineno++;
-    fprintf(@out, "#define YYNRULE %d\n", lemp.nrule);
-    lineno++;
     if (lemp.errsym.useCnt != 0)
     {
         fprintf(@out, "#define YYERRORSYMBOL %d\n", lemp.errsym.index);
@@ -1723,29 +1744,19 @@ public static void ReportTable(lemon lemp, int mhflag)
         fprintf(@out, "#define YYFALLBACK 1\n");
         lineno++;
     }
-    tplt_xfer(ref lemp.name, in, @out, ref lineno);
 
-    /* Generate the action table and its associates:
-    **
-    **  yy_action[]        A single table containing all actions.
-    **  yy_lookahead[]     A table containing the lookahead for each entry in
-    **                     yy_action.  Used to detect hash collisions.
-    **  yy_shift_ofst[]    For each state, the offset into yy_action for
-    **                     shifting terminals.
-    **  yy_reduce_ofst[]   For each state, the offset into yy_action for
-    **                     shifting non-terminals after a reduce.
-    **  yy_default[]       Default action for each state.
+    /* Compute the action table, but do not output it yet.  The action
+    ** table must be computed before generating the YYNSTATE macro because
+    ** we need to know how many states can be eliminated.
     */
-
-    /* Compute the actions on all states and count them up */
     //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
-    ax = (axset)calloc(lemp.nstate * 2, sizeof(ax[0]));
+    ax = (axset)calloc(lemp.nxstate * 2, sizeof(ax[0]));
     if (ax == 0)
     {
         Console.Error.Write("malloc failed\n");
         Environment.Exit(1);
     }
-    for (i = 0; i < lemp.nstate; i++)
+    for (i = 0; i < lemp.nxstate; i++)
     {
         stp = lemp.sorted[i];
         ax[i * 2].stp = stp;
@@ -1757,18 +1768,15 @@ public static void ReportTable(lemon lemp, int mhflag)
     }
     mxTknOfst = mnTknOfst = 0;
     mxNtOfst = mnNtOfst = 0;
-
-    /* Compute the action table.  In order to try to keep the size of the
-    ** action table to a minimum, the heuristic of placing the largest action
-    ** sets first is used.
-    */
-    for (i = 0; i < lemp.nstate * 2; i++)
+    /* In an effort to minimize the action table size, use the heuristic
+    ** of placing the largest action sets first */
+    for (i = 0; i < lemp.nxstate * 2; i++)
     {
         ax[i].iOrder = i;
     }
-    qsort(ax, lemp.nstate * 2, sizeof(ax[0]), axset_compare);
+    qsort(ax, lemp.nxstate * 2, sizeof(ax[0]), axset_compare);
     pActtab = acttab_alloc();
-    for (i = 0; i < lemp.nstate * 2 && ax[i].nAction > 0; i++)
+    for (i = 0; i < lemp.nxstate * 2 && ax[i].nAction > 0; i++)
     {
         stp = ax[i].stp;
         if (ax[i].isTkn)
@@ -1827,12 +1835,80 @@ public static void ReportTable(lemon lemp, int mhflag)
                 mxNtOfst = stp.iNtOfst;
             }
         }
+#if false
+	//		{ int jj, nn;
+	//		for (jj = nn = 0; jj<pActtab->nAction; jj++) {
+	//			if (pActtab->aAction[jj].action<0) nn++;
+	//		}
+	//		printf("%4d: State %3d %s n: %2d size: %5d freespace: %d\n",
+	//			i, stp->statenum, ax[i].isTkn ? "Token" : "Var  ",
+	//			ax[i].nAction, pActtab->nAction, nn);
+	//		}
+#endif
     }
     //C++ TO C# CONVERTER TODO TASK: The memory management function 'free' has no equivalent in C#:
     free(ax);
 
+    /* Mark rules that are actually used for reduce actions after all
+    ** optimizations have been applied
+    */
+    for (rp = lemp.rule; rp != null; rp = rp.next)
+    {
+        rp.doesReduce = Boolean.LEMON_FALSE;
+    }
+    for (i = 0; i < lemp.nxstate; i++)
+    {
+        action ap;
+        for (ap = lemp.sorted[i].ap; ap != null; ap = ap.next)
+        {
+            if (ap.type == e_action.REDUCE || ap.type == e_action.SHIFTREDUCE)
+            {
+                ap.x.rp.doesReduce = i;
+            }
+        }
+    }
+
+    /* Finish rendering the constants now that the action table has
+    ** been computed */
+    fprintf(@out, "#define YYNSTATE             %d\n", lemp.nxstate);
+    lineno++;
+    fprintf(@out, "#define YYNRULE              %d\n", lemp.nrule);
+    lineno++;
+    fprintf(@out, "#define YY_MAX_SHIFT         %d\n", lemp.nxstate - 1);
+    lineno++;
+    fprintf(@out, "#define YY_MIN_SHIFTREDUCE   %d\n", lemp.nstate);
+    lineno++;
+    i = lemp.nstate + lemp.nrule;
+    fprintf(@out, "#define YY_MAX_SHIFTREDUCE   %d\n", i - 1);
+    lineno++;
+    fprintf(@out, "#define YY_MIN_REDUCE        %d\n", i);
+    lineno++;
+    i = lemp.nstate + lemp.nrule * 2;
+    fprintf(@out, "#define YY_MAX_REDUCE        %d\n", i - 1);
+    lineno++;
+    fprintf(@out, "#define YY_ERROR_ACTION      %d\n", i);
+    lineno++;
+    fprintf(@out, "#define YY_ACCEPT_ACTION     %d\n", i + 1);
+    lineno++;
+    fprintf(@out, "#define YY_NO_ACTION         %d\n", i + 2);
+    lineno++;
+    tplt_xfer(ref lemp.name, in, @out, ref lineno);
+
+    /* Now output the action table and its associates:
+    **
+    **  yy_action[]        A single table containing all actions.
+    **  yy_lookahead[]     A table containing the lookahead for each entry in
+    **                     yy_action.  Used to detect hash collisions.
+    **  yy_shift_ofst[]    For each state, the offset into yy_action for
+    **                     shifting terminals.
+    **  yy_reduce_ofst[]   For each state, the offset into yy_action for
+    **                     shifting non-terminals after a reduce.
+    **  yy_default[]       Default action for each state.
+    */
+
     /* Output the yy_action table */
-    n = ((pActtab).nAction);
+    lemp.nactiontab = n = ((pActtab).nAction);
+    lemp.tablesize += n * szActionType;
     fprintf(@out, "#define YY_ACTTAB_COUNT (%d)\n", n);
     lineno++;
     fprintf(@out, "static const YYACTIONTYPE yy_action[] = {\n");
@@ -1864,6 +1940,7 @@ public static void ReportTable(lemon lemp, int mhflag)
     lineno++;
 
     /* Output the yy_lookahead table */
+    lemp.tablesize += n * szCodeType;
     fprintf(@out, "static const YYCODETYPE yy_lookahead[] = {\n");
     lineno++;
     for (i = j = 0; i < n; i++)
@@ -1893,21 +1970,22 @@ public static void ReportTable(lemon lemp, int mhflag)
     lineno++;
 
     /* Output the yy_shift_ofst[] table */
-    fprintf(@out, "#define YY_SHIFT_USE_DFLT (%d)\n", mnTknOfst - 1);
-    lineno++;
-    n = lemp.nstate;
+    n = lemp.nxstate;
     while (n > 0 && lemp.sorted[n - 1].iTknOfst == DefineConstants.NO_OFFSET)
     {
         n--;
     }
-    fprintf(@out, "#define YY_SHIFT_COUNT (%d)\n", n - 1);
+    fprintf(@out, "#define YY_SHIFT_USE_DFLT (%d)\n", lemp.nactiontab);
     lineno++;
-    fprintf(@out, "#define YY_SHIFT_MIN   (%d)\n", mnTknOfst);
+    fprintf(@out, "#define YY_SHIFT_COUNT    (%d)\n", n - 1);
     lineno++;
-    fprintf(@out, "#define YY_SHIFT_MAX   (%d)\n", mxTknOfst);
+    fprintf(@out, "#define YY_SHIFT_MIN      (%d)\n", mnTknOfst);
     lineno++;
-    fprintf(@out, "static const %s yy_shift_ofst[] = {\n", minimum_size_type(mnTknOfst - 1, mxTknOfst));
+    fprintf(@out, "#define YY_SHIFT_MAX      (%d)\n", mxTknOfst);
     lineno++;
+    fprintf(@out, "static const %s yy_shift_ofst[] = {\n", minimum_size_type(mnTknOfst, lemp.nterminal + lemp.nactiontab, ref sz));
+    lineno++;
+    lemp.tablesize += n * sz;
     for (i = j = 0; i < n; i++)
     {
         int ofst;
@@ -1915,7 +1993,7 @@ public static void ReportTable(lemon lemp, int mhflag)
         ofst = stp.iTknOfst;
         if (ofst == DefineConstants.NO_OFFSET)
         {
-            ofst = mnTknOfst - 1;
+            ofst = lemp.nactiontab;
         }
         if (j == 0)
         {
@@ -1939,7 +2017,7 @@ public static void ReportTable(lemon lemp, int mhflag)
     /* Output the yy_reduce_ofst[] table */
     fprintf(@out, "#define YY_REDUCE_USE_DFLT (%d)\n", mnNtOfst - 1);
     lineno++;
-    n = lemp.nstate;
+    n = lemp.nxstate;
     while (n > 0 && lemp.sorted[n - 1].iNtOfst == DefineConstants.NO_OFFSET)
     {
         n--;
@@ -1950,8 +2028,9 @@ public static void ReportTable(lemon lemp, int mhflag)
     lineno++;
     fprintf(@out, "#define YY_REDUCE_MAX   (%d)\n", mxNtOfst);
     lineno++;
-    fprintf(@out, "static const %s yy_reduce_ofst[] = {\n", minimum_size_type(mnNtOfst - 1, mxNtOfst));
+    fprintf(@out, "static const %s yy_reduce_ofst[] = {\n", minimum_size_type(mnNtOfst - 1, mxNtOfst, ref sz));
     lineno++;
+    lemp.tablesize += n * sz;
     for (i = j = 0; i < n; i++)
     {
         int ofst;
@@ -1983,7 +2062,8 @@ public static void ReportTable(lemon lemp, int mhflag)
     /* Output the default action table */
     fprintf(@out, "static const YYACTIONTYPE yy_default[] = {\n");
     lineno++;
-    n = lemp.nstate;
+    n = lemp.nxstate;
+    lemp.tablesize += n * szActionType;
     for (i = j = 0; i < n; i++)
     {
         stp = lemp.sorted[i];
@@ -1991,7 +2071,7 @@ public static void ReportTable(lemon lemp, int mhflag)
         {
             fprintf(@out, " /* %5d */ ", i);
         }
-        fprintf(@out, " %4d,", stp.iDflt);
+        fprintf(@out, " %4d,", stp.iDfltReduce + lemp.nstate + lemp.nrule);
         if (j == 9 || i == n - 1)
         {
             fprintf(@out, "\n");
@@ -2016,6 +2096,7 @@ public static void ReportTable(lemon lemp, int mhflag)
         {
             mx--;
         }
+        lemp.tablesize += (mx + 1) * szCodeType;
         for (i = 0; i <= mx; i++)
         {
             symbol[] p = lemp.symbols[i];
@@ -2057,7 +2138,7 @@ public static void ReportTable(lemon lemp, int mhflag)
     */
     for (i = 0, rp = lemp.rule; rp != null; rp = rp.next, i++)
     {
-        Debug.Assert(rp.index == i);
+        Debug.Assert(rp.iRule == i);
         fprintf(@out, " /* %3d */ \"", i);
         writeRuleText(@out, rp);
         fprintf(@out, "\",\n");
@@ -2138,6 +2219,10 @@ public static void ReportTable(lemon lemp, int mhflag)
         {
             continue;
         }
+        if (sp.destLineno < 0)
+        {
+            continue; // Already emitted
+        }
         fprintf(@out, "    case %d: /* %s */\n", sp.index, sp.name);
         lineno++;
 
@@ -2149,7 +2234,7 @@ public static void ReportTable(lemon lemp, int mhflag)
             {
                 fprintf(@out, "    case %d: /* %s */\n", sp2.index, sp2.name);
                 lineno++;
-                sp2.destructor = 0;
+                sp2.destLineno = -1; // Avoid emitting this destructor again
             }
         }
 
@@ -2178,41 +2263,48 @@ public static void ReportTable(lemon lemp, int mhflag)
     tplt_xfer(ref lemp.name, in, @out, ref lineno);
 
     /* Generate code which execution during each REDUCE action */
+    i = 0;
     for (rp = lemp.rule; rp != null; rp = rp.next)
     {
-        translate_code(lemp, rp);
+        i += translate_code(lemp, rp);
+    }
+    if (i != 0)
+    {
+        fprintf(@out, "        YYMINORTYPE yylhsminor;\n");
+        lineno++;
     }
     /* First output rules other than the default: rule */
     for (rp = lemp.rule; rp != null; rp = rp.next)
     {
         rule rp2; // Other rules with the same action
-        if (rp.code == 0)
+        if (rp.codeEmitted != 0)
         {
             continue;
         }
-        if (rp.code[0] == '\n' && rp.code[1] == 0)
+        if (rp.noCode != 0)
         {
-            continue; // Will be default:
+            /* No C code actions, so this will be part of the "default:" rule */
+            continue;
         }
-        fprintf(@out, "      case %d: /* ", rp.index);
+        fprintf(@out, "      case %d: /* ", rp.iRule);
         writeRuleText(@out, rp);
         fprintf(@out, " */\n");
         lineno++;
         for (rp2 = rp.next; rp2 != null; rp2 = rp2.next)
         {
-            if (rp2.code == rp.code)
+            if (rp2.code == rp.code && rp2.codePrefix == rp.codePrefix && rp2.codeSuffix == rp.codeSuffix)
             {
-                fprintf(@out, "      case %d: /* ", rp2.index);
+                fprintf(@out, "      case %d: /* ", rp2.iRule);
                 writeRuleText(@out, rp2);
-                fprintf(@out, " */ yytestcase(yyruleno==%d);\n", rp2.index);
+                fprintf(@out, " */ yytestcase(yyruleno==%d);\n", rp2.iRule);
                 lineno++;
-                rp2.code = 0;
+                rp2.codeEmitted = 1;
             }
         }
         emit_code(@out, rp, lemp, ref lineno);
         fprintf(@out, "        break;\n");
         lineno++;
-        rp.code = 0;
+        rp.codeEmitted = 1;
     }
     /* Finally, output the default: rule.  We choose as the default: all
     ** empty actions. */
@@ -2220,15 +2312,23 @@ public static void ReportTable(lemon lemp, int mhflag)
     lineno++;
     for (rp = lemp.rule; rp != null; rp = rp.next)
     {
-        if (rp.code == 0)
+        if (rp.codeEmitted != 0)
         {
             continue;
         }
-        Debug.Assert(rp.code[0] == '\n' && rp.code[1] == 0);
-        fprintf(@out, "      /* (%d) ", rp.index);
+        Debug.Assert(rp.noCode);
+        fprintf(@out, "      /* (%d) ", rp.iRule);
         writeRuleText(@out, rp);
-        fprintf(@out, " */ yytestcase(yyruleno==%d);\n", rp.index);
-        lineno++;
+        if (rp.doesReduce)
+        {
+            fprintf(@out, " */ yytestcase(yyruleno==%d);\n", rp.iRule);
+            lineno++;
+        }
+        else
+        {
+            fprintf(@out, " (OPTIMIZED OUT) */ assert(yyruleno!=%d);\n", rp.iRule);
+            lineno++;
+        }
     }
     fprintf(@out, "        break;\n");
     lineno++;
@@ -2316,6 +2416,7 @@ public static void CompressTables(lemon lemp)
     state stp;
     action ap;
     action ap2;
+    action nextap;
     rule rp;
     rule rp2;
     rule rbest;
@@ -2404,6 +2505,98 @@ public static void CompressTables(lemon lemp)
             }
         }
         stp.ap = Action_sort(stp.ap);
+
+        for (ap = stp.ap; ap != null; ap = ap.next)
+        {
+            if (ap.type == e_action.SHIFT)
+            {
+                break;
+            }
+            if (ap.type == e_action.REDUCE && ap.x.rp != rbest)
+            {
+                break;
+            }
+        }
+        if (ap == 0)
+        {
+            stp.autoReduce = 1;
+            //C++ TO C# CONVERTER TODO TASK: C# does not have an equivalent to pointers to variables (in C#, the variable no longer points to the original when the original variable is re-assigned):
+            //ORIGINAL LINE: stp->pDfltReduce = rbest;
+            stp.pDfltReduce = rbest;
+        }
+    }
+
+    /* Make a second pass over all states and actions.  Convert
+    ** every action that is a SHIFT to an autoReduce state into
+    ** a SHIFTREDUCE action.
+    */
+    for (i = 0; i < lemp.nstate; i++)
+    {
+        stp = lemp.sorted[i];
+        for (ap = stp.ap; ap != null; ap = ap.next)
+        {
+            state pNextState;
+            if (ap.type != e_action.SHIFT)
+            {
+                continue;
+            }
+            pNextState = ap.x.stp;
+            if (pNextState.autoReduce != 0 && pNextState.pDfltReduce != 0)
+            {
+                ap.type = e_action.SHIFTREDUCE;
+                ap.x.rp = pNextState.pDfltReduce;
+            }
+        }
+    }
+
+    /* If a SHIFTREDUCE action specifies a rule that has a single RHS term
+    ** (meaning that the SHIFTREDUCE will land back in the state where it
+    ** started) and if there is no C-code associated with the reduce action,
+    ** then we can go ahead and convert the action to be the same as the
+    ** action for the RHS of the rule.
+    */
+    for (i = 0; i < lemp.nstate; i++)
+    {
+        stp = lemp.sorted[i];
+        for (ap = stp.ap; ap != null; ap = nextap)
+        {
+            nextap = ap.next;
+            if (ap.type != e_action.SHIFTREDUCE)
+            {
+                continue;
+            }
+            rp = ap.x.rp;
+            if (rp.noCode == 0)
+            {
+                continue;
+            }
+            if (rp.nrhs != 1)
+            {
+                continue;
+            }
+#if 1
+				/* Only apply this optimization to non-terminals.  It would be OK to
+				** apply it to terminal symbols too, but that makes the parser tables
+				** larger. */
+				if (ap.sp.index < lemp.nterminal)
+				{
+					continue;
+				}
+#endif
+            /* If we reach this point, it means the optimization can be applied */
+            //C++ TO C# CONVERTER TODO TASK: C# does not have an equivalent to pointers to variables (in C#, the variable no longer points to the original when the original variable is re-assigned):
+            //ORIGINAL LINE: nextap = ap;
+            nextap = ap;
+            for (ap2 = stp.ap; ap2 && (ap2 == ap || ap2.sp != rp.lhs); ap2 = ap2.next)
+            {
+            }
+            Debug.Assert(ap2 != 0);
+            ap.spOpt = ap2.sp;
+            ap.type = ap2.type;
+            //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy assignment (rather than a reference assignment) - this should be verified and a 'CopyFrom' method should be created if it does not yet exist:
+            //ORIGINAL LINE: ap->x = ap2->x;
+            ap.x.CopyFrom(ap2.x);
+        }
     }
 }
 
@@ -2421,12 +2614,13 @@ public static void ResortStates(lemon lemp)
     {
         stp = lemp.sorted[i];
         stp.nTknAct = stp.nNtAct = 0;
-        stp.iDflt = lemp.nstate + lemp.nrule;
+        stp.iDfltReduce = lemp.nrule; // Init dflt action to "syntax error"
         stp.iTknOfst = DefineConstants.NO_OFFSET;
         stp.iNtOfst = DefineConstants.NO_OFFSET;
         for (ap = stp.ap; ap != null; ap = ap.next)
         {
-            if (compute_action(lemp, ap) >= 0)
+            int iAction = compute_action(lemp, ap);
+            if (iAction >= 0)
             {
                 if (ap.sp.index < lemp.nterminal)
                 {
@@ -2438,7 +2632,8 @@ public static void ResortStates(lemon lemp)
                 }
                 else
                 {
-                    stp.iDflt = compute_action(lemp, ap);
+                    Debug.Assert(stp.autoReduce == 0 || stp.pDfltReduce == ap.x.rp);
+                    stp.iDfltReduce = iAction - lemp.nstate - lemp.nrule;
                 }
             }
         }
@@ -2447,6 +2642,11 @@ public static void ResortStates(lemon lemp)
     for (i = 0; i < lemp.nstate; i++)
     {
         lemp.sorted[i].statenum = i;
+    }
+    lemp.nxstate = lemp.nstate;
+    while (lemp.nxstate > 1 && lemp.sorted[lemp.nxstate - 1].autoReduce != 0)
+    {
+        lemp.nxstate--;
     }
 }
 
@@ -2622,18 +2822,18 @@ public static int Strsafe_insert(string data)
     {
         /* Need to make the hash table bigger */
         int i;
-        int size;
+        int arrSize;
         s_x1 array = new s_x1();
-        array.size = size = x1a.size * 2;
+        array.size = arrSize = x1a.size * 2;
         array.count = x1a.count;
         //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
-        array.tbl = (s_x1node)calloc(size, sizeof(s_x1node) + sizeof(s_x1node));
+        array.tbl = (s_x1node)calloc(arrSize, sizeof(s_x1node) + sizeof(s_x1node));
         if (array.tbl == 0)
         {
             return 0; // Fail due to malloc failure
         }
-        array.ht = (s_x1node) & (array.tbl[size]);
-        for (i = 0; i < size; i++)
+        array.ht = (s_x1node) & (array.tbl[arrSize]);
+        for (i = 0; i < arrSize; i++)
         {
             array.ht[i] = 0;
         }
@@ -2642,7 +2842,7 @@ public static int Strsafe_insert(string data)
             s_x1node oldnp;
             s_x1node newnp;
             oldnp = (x1a.tbl[i]);
-            h = strhash(oldnp.data) & (size - 1);
+            h = strhash(oldnp.data) & (arrSize - 1);
             newnp = (array.tbl[i]);
             if (array.ht[h] != null)
             {
@@ -2720,7 +2920,7 @@ public static symbol Symbol_new(string x)
             memory_error();
         };
         sp.name = Strsafe(x);
-        sp.type = char.IsUpper(x) ? symbol_type.TERMINAL : symbol_type.NONTERMINAL;
+        sp.type = char.IsUpper((byte)(x)) ? symbol_type.TERMINAL : symbol_type.NONTERMINAL;
         sp.rule = 0;
         sp.fallback = 0;
         sp.prec = -1;
@@ -2821,18 +3021,18 @@ public static int Symbol_insert(symbol data, string key)
     {
         /* Need to make the hash table bigger */
         int i;
-        int size;
+        int arrSize;
         s_x2 array = new s_x2();
-        array.size = size = x2a.size * 2;
+        array.size = arrSize = x2a.size * 2;
         array.count = x2a.count;
         //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
-        array.tbl = (s_x2node)calloc(size, sizeof(s_x2node) + sizeof(s_x2node));
+        array.tbl = (s_x2node)calloc(arrSize, sizeof(s_x2node) + sizeof(s_x2node));
         if (array.tbl == 0)
         {
             return 0; // Fail due to malloc failure
         }
-        array.ht = (s_x2node) & (array.tbl[size]);
-        for (i = 0; i < size; i++)
+        array.ht = (s_x2node) & (array.tbl[arrSize]);
+        for (i = 0; i < arrSize; i++)
         {
             array.ht[i] = 0;
         }
@@ -2841,7 +3041,7 @@ public static int Symbol_insert(symbol data, string key)
             s_x2node oldnp;
             s_x2node newnp;
             oldnp = (x2a.tbl[i]);
-            h = strhash(oldnp.key) & (size - 1);
+            h = strhash(oldnp.key) & (arrSize - 1);
             newnp = (array.tbl[i]);
             if (array.ht[h] != null)
             {
@@ -2929,16 +3129,16 @@ public static symbol[] Symbol_arrayof()
 {
     symbol[] array;
     int i;
-    int size;
+    int arrSize;
     if (x2a == 0)
     {
         return 0;
     }
-    size = x2a.count;
-    array = Arrays.InitializeWithDefaultInstances<symbol>(size);
+    arrSize = x2a.count;
+    array = Arrays.InitializeWithDefaultInstances<symbol>(arrSize);
     if (array != null)
     {
-        for (i = 0; i < size; i++)
+        for (i = 0; i < arrSize; i++)
         {
             array[i] = x2a.tbl[i].data;
         }
@@ -3039,18 +3239,18 @@ public static int State_insert(state data, config key)
     {
         /* Need to make the hash table bigger */
         int i;
-        int size;
+        int arrSize;
         s_x3 array = new s_x3();
-        array.size = size = x3a.size * 2;
+        array.size = arrSize = x3a.size * 2;
         array.count = x3a.count;
         //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
-        array.tbl = (s_x3node)calloc(size, sizeof(s_x3node) + sizeof(s_x3node));
+        array.tbl = (s_x3node)calloc(arrSize, sizeof(s_x3node) + sizeof(s_x3node));
         if (array.tbl == 0)
         {
             return 0; // Fail due to malloc failure
         }
-        array.ht = (s_x3node) & (array.tbl[size]);
-        for (i = 0; i < size; i++)
+        array.ht = (s_x3node) & (array.tbl[arrSize]);
+        for (i = 0; i < arrSize; i++)
         {
             array.ht[i] = 0;
         }
@@ -3059,7 +3259,7 @@ public static int State_insert(state data, config key)
             s_x3node oldnp;
             s_x3node newnp;
             oldnp = (x3a.tbl[i]);
-            h = statehash(oldnp.key) & (size - 1);
+            h = statehash(oldnp.key) & (arrSize - 1);
             newnp = (array.tbl[i]);
             if (array.ht[h] != null)
             {
@@ -3128,16 +3328,16 @@ public static state[] State_arrayof()
 {
     state[] array;
     int i;
-    int size;
+    int arrSize;
     if (x3a == 0)
     {
         return 0;
     }
-    size = x3a.count;
-    array = Arrays.InitializeWithDefaultInstances<state>(size);
+    arrSize = x3a.count;
+    array = Arrays.InitializeWithDefaultInstances<state>(arrSize);
     if (array != null)
     {
-        for (i = 0; i < size; i++)
+        for (i = 0; i < arrSize; i++)
         {
             array[i] = x3a.tbl[i].data;
         }
@@ -3209,18 +3409,18 @@ public static int Configtable_insert(config data)
     {
         /* Need to make the hash table bigger */
         int i;
-        int size;
+        int arrSize;
         s_x4 array = new s_x4();
-        array.size = size = x4a.size * 2;
+        array.size = arrSize = x4a.size * 2;
         array.count = x4a.count;
         //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
-        array.tbl = (s_x4node)calloc(size, sizeof(s_x4node) + sizeof(s_x4node));
+        array.tbl = (s_x4node)calloc(arrSize, sizeof(s_x4node) + sizeof(s_x4node));
         if (array.tbl == 0)
         {
             return 0; // Fail due to malloc failure
         }
-        array.ht = (s_x4node) & (array.tbl[size]);
-        for (i = 0; i < size; i++)
+        array.ht = (s_x4node) & (array.tbl[arrSize]);
+        for (i = 0; i < arrSize; i++)
         {
             array.ht[i] = 0;
         }
@@ -3229,7 +3429,7 @@ public static int Configtable_insert(config data)
             s_x4node oldnp;
             s_x4node newnp;
             oldnp = (x4a.tbl[i]);
-            h = confighash(oldnp.data) & (size - 1);
+            h = confighash(oldnp.data) & (arrSize - 1);
             newnp = (array.tbl[i]);
             if (array.ht[h] != null)
             {
@@ -3324,7 +3524,7 @@ internal static int actioncmp(action ap1, action ap2)
     {
         rc = (int)ap1.type - (int)ap2.type;
     }
-    if (rc == 0 && ap1.type == e_action.REDUCE)
+    if (rc == 0 && (ap1.type == e_action.REDUCE || ap1.type == e_action.SHIFTREDUCE))
     {
         rc = ap1.x.rp.index - ap2.x.rp.index;
     }
@@ -3345,6 +3545,7 @@ public static void Action_add(action[] app, e_action type, symbol sp, ref string
     //C++ TO C# CONVERTER TODO TASK: C# does not have an equivalent to pointers to variables (in C#, the variable no longer points to the original when the original variable is re-assigned):
     //ORIGINAL LINE: newaction->sp = sp;
     newaction.sp = sp;
+    newaction.spOpt = 0;
     if (type == e_action.SHIFT)
     {
         newaction.x.stp = (state)arg;
@@ -3805,14 +4006,14 @@ public static void FindStates(lemon lemp)
         sp = Symbol_find(lemp.start);
         if (sp == 0)
         {
-            ErrorMsg(lemp.filename, 0, "The specified start symbol \"%s\" is not 				in a nonterminal of the grammar.  \"%s\" will be used as the start 				symbol instead.", lemp.start, lemp.rule.lhs.name);
+            ErrorMsg(lemp.filename, 0, "The specified start symbol \"%s\" is not in a nonterminal of the grammar.  \"%s\" will be used as the start symbol instead.", lemp.start, lemp.startRule.lhs.name);
             lemp.errorcnt++;
-            sp = lemp.rule.lhs;
+            sp = lemp.startRule.lhs;
         }
     }
     else
     {
-        sp = lemp.rule.lhs;
+        sp = lemp.startRule.lhs;
     }
 
     /* Make sure the start symbol doesn't occur on the right-hand side of
@@ -3825,7 +4026,7 @@ public static void FindStates(lemon lemp)
         {
             if (rp.rhs[i] == sp)
             { // FIX ME:  Deal with multiterminals
-                ErrorMsg(lemp.filename, 0, "The start symbol \"%s\" occurs on the 					right-hand side of a rule. This will result in a parser which 					does not work properly.", sp.name);
+                ErrorMsg(lemp.filename, 0, "The start symbol \"%s\" occurs on the right-hand side of a rule. This will result in a parser which does not work properly.", sp.name);
                 lemp.errorcnt++;
             }
         }
@@ -4182,12 +4383,12 @@ public static void FindActions(lemon lemp)
         sp = Symbol_find(lemp.start);
         if (sp == 0)
         {
-            sp = lemp.rule.lhs;
+            sp = lemp.startRule.lhs;
         }
     }
     else
     {
-        sp = lemp.rule.lhs;
+        sp = lemp.startRule.lhs;
     }
     /* Add to the first state (which is always the starting state of the
     ** finite state machine) an action to ACCEPT if the lookahead is the
@@ -4199,7 +4400,6 @@ public static void FindActions(lemon lemp)
     {
         action ap;
         action nap;
-        state stp;
         stp = lemp.sorted[i];
         /* assert( stp->ap ); */
         stp.ap = Action_sort(stp.ap);
@@ -4341,6 +4541,129 @@ internal static void handle_T_option(ref string z)
     }
     lemon_strcpy(user_templatename, z);
 }
+
+/* Merge together to lists of rules ordered by rule.iRule */
+internal static rule Rule_merge(rule pA, rule pB)
+{
+    rule pFirst = 0;
+    rule[] ppPrev = pFirst;
+    while (pA != null && pB != null)
+    {
+        if (pA.iRule < pB.iRule)
+        {
+            ppPrev = pA;
+            ppPrev = pA.next;
+            pA = pA.next;
+        }
+        else
+        {
+            ppPrev = pB;
+            ppPrev = pB.next;
+            pB = pB.next;
+        }
+    }
+    if (pA != null)
+    {
+        ppPrev = pA;
+    }
+    else
+    {
+        ppPrev = pB;
+    }
+    return pFirst;
+}
+
+/*
+** Sort a list of rules in order of increasing iRule value
+*/
+internal static rule Rule_sort(rule rp)
+{
+    int i;
+    rule pNext;
+    rule[] x = Arrays.InitializeWithDefaultInstances<rule>(32);
+    //C++ TO C# CONVERTER TODO TASK: The memory management function 'memset' has no equivalent in C#:
+    memset(x, 0, sizeof(rule));
+    while (rp != null)
+    {
+        pNext = rp.next;
+        rp.next = 0;
+        //C++ TO C# CONVERTER WARNING: This 'sizeof' ratio was replaced with a direct reference to the array length:
+        //ORIGINAL LINE: for (i = 0; i<sizeof(x) / sizeof(x[0]) && x[i]; i++)
+        for (i = 0; i < x.Length && x[i] != null; i++)
+        {
+            rp = Rule_merge(x[i], rp);
+            x[i] = 0;
+        }
+        x[i] = rp;
+        //C++ TO C# CONVERTER TODO TASK: C# does not have an equivalent to pointers to variables (in C#, the variable no longer points to the original when the original variable is re-assigned):
+        //ORIGINAL LINE: rp = pNext;
+        rp = pNext;
+    }
+    rp = 0;
+    //C++ TO C# CONVERTER WARNING: This 'sizeof' ratio was replaced with a direct reference to the array length:
+    //ORIGINAL LINE: for (i = 0; i<sizeof(x) / sizeof(x[0]); i++)
+    for (i = 0; i < x.Length; i++)
+    {
+        rp = Rule_merge(x[i], rp);
+    }
+    return rp;
+}
+
+/*
+** Return the name of a C datatype able to represent values between
+** lwr and upr, inclusive.  If pnByte!=NULL then also write the sizeof
+** for that type (1, 2, or 4) into *pnByte.
+*/
+
+/* forward reference */
+internal static string minimum_size_type(int lwr, int upr, ref int pnByte)
+{
+    string zType = "int";
+    int nByte = 4;
+    if (lwr >= 0)
+    {
+        if (upr <= 255)
+        {
+            zType = "unsigned char";
+            nByte = 1;
+        }
+        else if (upr < 65535)
+        {
+            zType = "unsigned short int";
+            nByte = 2;
+        }
+        else
+        {
+            zType = "unsigned int";
+            nByte = 4;
+        }
+    }
+    else if (lwr >= -127 && upr <= 127)
+    {
+        zType = "signed char";
+        nByte = 1;
+    }
+    else if (lwr >= -32767 && upr < 32767)
+    {
+        zType = "short";
+        nByte = 2;
+    }
+    if (pnByte != 0)
+    {
+        pnByte = nByte;
+    }
+    return zType;
+}
+
+/* Print a single line of the "Parser Stats" output
+*/
+internal static void stats_line(string zLabel, int iValue)
+{
+    int nLabel = ((int)zLabel.Length);
+    //C++ TO C# CONVERTER TODO TASK: The following line has a C format specifier which cannot be directly translated to C#:
+    //ORIGINAL LINE: printf("  %s%.*s %5d\n", zLabel, 35 - nLabel, "................................", iValue);
+    Console.Write("  {0}%.*s {2,5:D}\n", zLabel, 35 - nLabel, "................................", iValue);
+}
 //C++ TO C# CONVERTER NOTE: This was formerly a static local variable declaration (not allowed in C#):
 private static int Main_version = 0;
 //C++ TO C# CONVERTER NOTE: This was formerly a static local variable declaration (not allowed in C#):
@@ -4365,15 +4688,19 @@ private static Main_s_options[] options =
     new Main_s_options(option_type.OPT_FLAG, "b", (string) & basisflag, "Print only the basis in report."),
     new Main_s_options(option_type.OPT_FLAG, "c", (string) & compress, "Don't compress the action table."),
     new Main_s_options(option_type.OPT_FSTR, "D", (string)handle_D_option, "Define an %ifdef macro."),
-    new Main_s_options(option_type.OPT_FSTR, "T", (string)handle_T_option, "Specify a template file."),
+    new Main_s_options(option_type.OPT_FSTR, "f", 0, "Ignored.  (Placeholder for -f compiler options.)"),
     new Main_s_options(option_type.OPT_FLAG, "g", (string) & rpflag, "Print grammar without actions."),
+    new Main_s_options(option_type.OPT_FSTR, "I", 0, "Ignored.  (Placeholder for '-I' compiler options.)"),
     new Main_s_options(option_type.OPT_FLAG, "m", (string) & mhflag, "Output a makeheaders compatible file."),
     new Main_s_options(option_type.OPT_FLAG, "l", (string) & nolinenosflag, "Do not print #line statements."),
+    new Main_s_options(option_type.OPT_FSTR, "O", 0, "Ignored.  (Placeholder for '-O' compiler options.)"),
     new Main_s_options(option_type.OPT_FLAG, "p", (string) & showPrecedenceConflict, "Show conflicts resolved by precedence rules"),
     new Main_s_options(option_type.OPT_FLAG, "q", (string) & quiet, "(Quiet) Don't print the report file."),
     new Main_s_options(option_type.OPT_FLAG, "r", (string) & noResort, "Do not sort or renumber states"),
     new Main_s_options(option_type.OPT_FLAG, "s", (string) & statistics, "Print parser stats to standard output."),
     new Main_s_options(option_type.OPT_FLAG, "x", (string) & version, "Print the version number."),
+    new Main_s_options(option_type.OPT_FSTR, "T", (string)handle_T_option, "Specify a template file."),
+    new Main_s_options(option_type.OPT_FSTR, "W", 0, "Ignored.  (Placeholder for '-W' compiler options.)"),
     new Main_s_options(option_type.OPT_FLAG, 0, 0, 0)
 };
 
@@ -4399,10 +4726,11 @@ static int Main(string[] args)
     //C++ TO C# CONVERTER NOTE: This static local variable declaration (not allowed in C#) has been moved just prior to the method:
     //	static int noResort = 0;
     //C++ TO C# CONVERTER NOTE: This static local variable declaration (not allowed in C#) has been moved just prior to the method:
-    //	static struct s_options options[] = { { OPT_FLAG, "b", (sbyte*)&basisflag, "Print only the basis in report." }, { OPT_FLAG, "c", (sbyte*)&compress, "Don't compress the action table." }, { OPT_FSTR, "D", (sbyte*)handle_D_option, "Define an %ifdef macro." }, { OPT_FSTR, "T", (sbyte*)handle_T_option, "Specify a template file." }, { OPT_FLAG, "g", (sbyte*)&rpflag, "Print grammar without actions." }, { OPT_FLAG, "m", (sbyte*)&mhflag, "Output a makeheaders compatible file." }, { OPT_FLAG, "l", (sbyte*)&nolinenosflag, "Do not print #line statements." }, { OPT_FLAG, "p", (sbyte*)&showPrecedenceConflict, "Show conflicts resolved by precedence rules" }, { OPT_FLAG, "q", (sbyte*)&quiet, "(Quiet) Don't print the report file." }, { OPT_FLAG, "r", (sbyte*)&noResort, "Do not sort or renumber states" }, { OPT_FLAG, "s", (sbyte*)&statistics, "Print parser stats to standard output." }, { OPT_FLAG, "x", (sbyte*)&version, "Print the version number." }, { OPT_FLAG, 0, 0, 0 } };
+    //	static struct s_options options[] = { { OPT_FLAG, "b", (sbyte*)&basisflag, "Print only the basis in report." }, { OPT_FLAG, "c", (sbyte*)&compress, "Don't compress the action table." }, { OPT_FSTR, "D", (sbyte*)handle_D_option, "Define an %ifdef macro." }, { OPT_FSTR, "f", 0, "Ignored.  (Placeholder for -f compiler options.)" }, { OPT_FLAG, "g", (sbyte*)&rpflag, "Print grammar without actions." }, { OPT_FSTR, "I", 0, "Ignored.  (Placeholder for '-I' compiler options.)" }, { OPT_FLAG, "m", (sbyte*)&mhflag, "Output a makeheaders compatible file." }, { OPT_FLAG, "l", (sbyte*)&nolinenosflag, "Do not print #line statements." }, { OPT_FSTR, "O", 0, "Ignored.  (Placeholder for '-O' compiler options.)" }, { OPT_FLAG, "p", (sbyte*)&showPrecedenceConflict, "Show conflicts resolved by precedence rules" }, { OPT_FLAG, "q", (sbyte*)&quiet, "(Quiet) Don't print the report file." }, { OPT_FLAG, "r", (sbyte*)&noResort, "Do not sort or renumber states" }, { OPT_FLAG, "s", (sbyte*)&statistics, "Print parser stats to standard output." }, { OPT_FLAG, "x", (sbyte*)&version, "Print the version number." }, { OPT_FSTR, "T", (sbyte*)handle_T_option, "Specify a template file." }, { OPT_FSTR, "W", 0, "Ignored.  (Placeholder for '-W' compiler options.)" }, { OPT_FLAG,0,0,0 } };
     int i;
     int exitcode;
     lemon lem = new lemon();
+    rule rp;
 
     //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
     //ORIGINAL LINE: OptInit(args, options, stderr);
@@ -4464,11 +4792,29 @@ static int Main(string[] args)
     }
     Debug.Assert(string.Compare(lem.symbols[i - 1].name, "{default}") == 0);
     lem.nsymbol = i - 1;
-    for (i = 1; char.IsUpper(lem.symbols[i].name[0]); i++)
+    for (i = 1; char.IsUpper((byte)(lem.symbols[i].name[0])); i++)
     {
         ;
     }
     lem.nterminal = i;
+
+    /* Assign sequential rule numbers.  Start with 0.  Put rules that have no
+    ** reduce action C-code associated with them last, so that the switch()
+    ** statement that selects reduction actions will have a smaller jump table.
+    */
+    for (i = 0, rp = lem.rule; rp != null; rp = rp.next)
+    {
+        rp.iRule = rp.code != 0 ? i++ : -1;
+    }
+    for (rp = lem.rule; rp != null; rp = rp.next)
+    {
+        if (rp.iRule < 0)
+        {
+            rp.iRule = i++;
+        }
+    }
+    lem.startRule = lem.rule;
+    lem.rule = Rule_sort(lem.rule);
 
     /* Generate a reprint of the grammar, if requested on the command line */
     if (Main_rpflag)
@@ -4535,8 +4881,15 @@ static int Main(string[] args)
     }
     if (Main_statistics)
     {
-        Console.Write("Parser statistics: {0:D} terminals, {1:D} nonterminals, {2:D} rules\n", lem.nterminal, lem.nsymbol - lem.nterminal, lem.nrule);
-        Console.Write("                   {0:D} states, {1:D} parser table entries, {2:D} conflicts\n", lem.nstate, lem.tablesize, lem.nconflict);
+        Console.Write("Parser statistics:\n");
+        stats_line("terminal symbols", lem.nterminal);
+        stats_line("non-terminal symbols", lem.nsymbol - lem.nterminal);
+        stats_line("total symbols", lem.nsymbol);
+        stats_line("rules", lem.nrule);
+        stats_line("states", lem.nxstate);
+        stats_line("conflicts", lem.nconflict);
+        stats_line("action table entries", lem.nactiontab);
+        stats_line("total table size (bytes)", lem.tablesize);
     }
     if (lem.nconflict > 0)
     {
@@ -4757,6 +5110,10 @@ internal static int handleflags(int i, FILE err)
         }
         errcnt++;
     }
+    else if (op[j].arg == 0)
+    {
+        /* Ignore this option */
+    }
     else if (op[j].type == option_type.OPT_FLAG)
     {
         (int)op[j].arg = v;
@@ -4835,7 +5192,7 @@ internal static int handleswitch(int i, FILE err)
                     if (err != null)
                     {
                         fprintf(err, "%sillegal character in floating-point argument.\n", emsg);
-                        errline(i, ((uint)end) - (uint)argv[i], err);
+                        errline(i, (int)((string)end - (string)argv[i]), err);
                     }
                     errcnt++;
                 }
@@ -4848,7 +5205,7 @@ internal static int handleswitch(int i, FILE err)
                     if (err != null)
                     {
                         fprintf(err, "%sillegal character in integer argument.\n", emsg);
-                        errline(i, ((uint)end) - (uint)argv[i], err);
+                        errline(i, (int)((string)end - (string)argv[i]), err);
                     }
                     errcnt++;
                 }
@@ -4892,8 +5249,8 @@ internal static void parseonetoken(pstate psp)
     string x;
     x = Strsafe(psp.tokenstart); // Save the token permanently
 #if false
-	//	printf("%s:%d: Token=[%s] state=%d\n",psp->filename,psp->tokenlineno,
-	//		x,psp->state);
+	//	printf("%s:%d: Token=[%s] state=%d\n", psp->filename, psp->tokenlineno,
+	//		x, psp->state);
 #endif
     switch (psp.state)
     {
@@ -4909,7 +5266,7 @@ internal static void parseonetoken(pstate psp)
             {
                 psp.state = e_state.WAITING_FOR_DECL_KEYWORD;
             }
-            else if (char.IsLower(x[0]))
+            else if (char.IsLower((byte)(x[0])))
             {
                 psp.lhs = Symbol_new(x);
                 psp.nrhs = 0;
@@ -4920,18 +5277,19 @@ internal static void parseonetoken(pstate psp)
             {
                 if (psp.prevrule == 0)
                 {
-                    ErrorMsg(psp.filename, psp.tokenlineno, "There is no prior rule upon which to attach the code 					fragment which begins on this line.");
+                    ErrorMsg(psp.filename, psp.tokenlineno, "There is no prior rule upon which to attach the code fragment which begins on this line.");
                     psp.errorcnt++;
                 }
                 else if (psp.prevrule.code != 0)
                 {
-                    ErrorMsg(psp.filename, psp.tokenlineno, "Code fragment beginning on this line is not the first 					to follow the previous rule.");
+                    ErrorMsg(psp.filename, psp.tokenlineno, "Code fragment beginning on this line is not the first to follow the previous rule.");
                     psp.errorcnt++;
                 }
                 else
                 {
                     psp.prevrule.line = psp.tokenlineno;
                     psp.prevrule.code = x[1];
+                    psp.prevrule.noCode = 0;
                 }
             }
             else if (x[0] == '[')
@@ -4945,7 +5303,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.PRECEDENCE_MARK_1:
-            if (!char.IsUpper(x[0]))
+            if (!char.IsUpper((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "The precedence symbol must be a terminal.");
                 psp.errorcnt++;
@@ -4957,7 +5315,7 @@ internal static void parseonetoken(pstate psp)
             }
             else if (psp.prevrule.precsym != 0)
             {
-                ErrorMsg(psp.filename, psp.tokenlineno, "Precedence mark on this line is not the first 				to follow the previous rule.");
+                ErrorMsg(psp.filename, psp.tokenlineno, "Precedence mark on this line is not the first to follow the previous rule.");
                 psp.errorcnt++;
             }
             else
@@ -4991,7 +5349,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.LHS_ALIAS_1:
-            if (char.IsLetter(x[0]))
+            if (char.IsLetter((byte)(x[0])))
             {
                 psp.lhsalias = x;
                 psp.state = e_state.LHS_ALIAS_2;
@@ -5054,6 +5412,7 @@ internal static void parseonetoken(pstate psp)
                     rp.lhsalias = psp.lhsalias;
                     rp.nrhs = psp.nrhs;
                     rp.code = 0;
+                    rp.noCode = 1;
                     rp.precsym = 0;
                     rp.index = psp.gp.nrule++;
                     rp.nextlhs = rp.lhs.rule;
@@ -5080,7 +5439,7 @@ internal static void parseonetoken(pstate psp)
                 }
                 psp.state = e_state.WAITING_FOR_DECL_OR_RULE;
             }
-            else if (char.IsLetter(x[0]))
+            else if (char.IsLetter((byte)(x[0])))
             {
                 if (psp.nrhs >= DefineConstants.MAXRHS)
                 {
@@ -5118,7 +5477,7 @@ internal static void parseonetoken(pstate psp)
                 //C++ TO C# CONVERTER TODO TASK: The memory management function 'realloc' has no equivalent in C#:
                 msp.subsym = (symbol)realloc(msp.subsym, sizeof(symbol) * msp.nsubsym);
                 msp.subsym[msp.nsubsym - 1] = Symbol_new(x[1]);
-                if (char.IsLower(x[1]) || char.IsLower(msp.subsym[0].name[0]))
+                if (char.IsLower((byte)(x[1])) || char.IsLower((byte)(msp.subsym[0].name[0])))
                 {
                     ErrorMsg(psp.filename, psp.tokenlineno, "Cannot form a compound containing a non-terminal");
                     psp.errorcnt++;
@@ -5136,7 +5495,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.RHS_ALIAS_1:
-            if (char.IsLetter(x[0]))
+            if (char.IsLetter((byte)(x[0])))
             {
                 psp.alias[psp.nrhs - 1] = x;
                 psp.state = e_state.RHS_ALIAS_2;
@@ -5161,7 +5520,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.WAITING_FOR_DECL_KEYWORD:
-            if (char.IsLetter(x[0]))
+            if (char.IsLetter((byte)(x[0])))
             {
                 psp.declkeyword = x;
                 psp.declargslot = 0;
@@ -5289,7 +5648,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.WAITING_FOR_DESTRUCTOR_SYMBOL:
-            if (!char.IsLetter(x[0]))
+            if (!char.IsLetter((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "Symbol name missing after %%destructor keyword");
                 psp.errorcnt++;
@@ -5305,7 +5664,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.WAITING_FOR_DATATYPE_SYMBOL:
-            if (!char.IsLetter(x[0]))
+            if (!char.IsLetter((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "Symbol name missing after %%type keyword");
                 psp.errorcnt++;
@@ -5337,7 +5696,7 @@ internal static void parseonetoken(pstate psp)
             {
                 psp.state = e_state.WAITING_FOR_DECL_OR_RULE;
             }
-            else if (char.IsUpper(x[0]))
+            else if (char.IsUpper((byte)(x[0])))
             {
                 symbol sp;
                 sp = Symbol_new(x);
@@ -5359,7 +5718,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.WAITING_FOR_DECL_ARG:
-            if (x[0] == '{' || x[0] == '\"' || char.IsLetterOrDigit(x[0]))
+            if (x[0] == '{' || x[0] == '\"' || char.IsLetterOrDigit((byte)(x[0])))
             {
                 string zOld;
                 string zNew;
@@ -5367,7 +5726,7 @@ internal static void parseonetoken(pstate psp)
                 string z;
                 int nOld;
                 int n;
-                int nLine;
+                int nLine = 0;
                 int nNew;
                 int nBack;
                 int addLineMacro;
@@ -5448,7 +5807,7 @@ internal static void parseonetoken(pstate psp)
             {
                 psp.state = e_state.WAITING_FOR_DECL_OR_RULE;
             }
-            else if (!char.IsUpper(x[0]))
+            else if (!char.IsUpper((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "%%fallback argument \"%s\" should be a token", x);
                 psp.errorcnt++;
@@ -5479,7 +5838,7 @@ internal static void parseonetoken(pstate psp)
             {
                 psp.state = e_state.WAITING_FOR_DECL_OR_RULE;
             }
-            else if (!char.IsUpper(x[0]))
+            else if (!char.IsUpper((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "%%wildcard argument \"%s\" should be a token", x);
                 psp.errorcnt++;
@@ -5501,7 +5860,7 @@ internal static void parseonetoken(pstate psp)
             }
             break;
         case e_state.WAITING_FOR_CLASS_ID:
-            if (!char.IsLower(x[0]))
+            if (!char.IsLower((byte)(x[0])))
             {
                 ErrorMsg(psp.filename, psp.tokenlineno, "%%token_class must be followed by an identifier: ", x);
                 psp.errorcnt++;
@@ -5525,13 +5884,13 @@ internal static void parseonetoken(pstate psp)
             {
                 psp.state = e_state.WAITING_FOR_DECL_OR_RULE;
             }
-            else if (char.IsUpper(x[0]) || ((x[0] == '|' || x[0] == '/') && char.IsUpper(x[1])))
+            else if (char.IsUpper((byte)(x[0])) || ((x[0] == '|' || x[0] == '/') && char.IsUpper((byte)(x[1]))))
             {
                 symbol msp = psp.tkclass;
                 msp.nsubsym++;
                 //C++ TO C# CONVERTER TODO TASK: The memory management function 'realloc' has no equivalent in C#:
                 msp.subsym = (symbol)realloc(msp.subsym, sizeof(symbol) * msp.nsubsym);
-                if (!char.IsUpper(x[0]))
+                if (!char.IsUpper((byte)(x[0])))
                 {
                     x = x.Substring(1);
                 }
@@ -5585,7 +5944,7 @@ internal static void preprocess_input(ref string z)
         {
             continue;
         }
-        if (string.Compare(z[i], 0, "%endif", 0, 6) == 0 && char.IsWhiteSpace(z[i + 6]))
+        if (string.Compare(z[i], 0, "%endif", 0, 6) == 0 && char.IsWhiteSpace((byte)(z[i + 6])))
         {
             if (exclude != 0)
             {
@@ -5606,7 +5965,7 @@ internal static void preprocess_input(ref string z)
                 z[j] = ' ';
             }
         }
-        else if ((string.Compare(z[i], 0, "%ifdef", 0, 6) == 0 && char.IsWhiteSpace(z[i + 6])) || (string.Compare(z[i], 0, "%ifndef", 0, 7) == 0 && char.IsWhiteSpace(z[i + 7])))
+        else if ((string.Compare(z[i], 0, "%ifdef", 0, 6) == 0 && char.IsWhiteSpace((byte)(z[i + 6]))) || (string.Compare(z[i], 0, "%ifndef", 0, 7) == 0 && char.IsWhiteSpace((byte)(z[i + 7]))))
         {
             if (exclude != 0)
             {
@@ -5614,10 +5973,10 @@ internal static void preprocess_input(ref string z)
             }
             else
             {
-                for (j = i + 7; char.IsWhiteSpace(z[j]); j++)
+                for (j = i + 7; char.IsWhiteSpace((byte)(z[j])); j++)
                 {
                 }
-                for (n = 0; z[j + n] && !char.IsWhiteSpace(z[j + n]); n++)
+                for (n = 0; z[j + n] && !char.IsWhiteSpace((byte)(z[j + n])); n++)
                 {
                 }
                 exclude = 1;
@@ -5711,17 +6070,17 @@ public static FILE file_open(lemon lemp, string suffix, string mode)
     return fp;
 }
 
-public static void ConfigPrint(FILE fp, config cfp)
+/* Print a single rule.
+*/
+public static void RulePrint(FILE fp, rule rp, int iCursor)
 {
-    rule rp;
     symbol sp;
     int i;
     int j;
-    rp = cfp.rp;
     fprintf(fp, "%s ::=", rp.lhs.name);
     for (i = 0; i <= rp.nrhs; i++)
     {
-        if (i == cfp.dot)
+        if (i == iCursor)
         {
             fprintf(fp, " *");
         }
@@ -5745,10 +6104,19 @@ public static void ConfigPrint(FILE fp, config cfp)
     }
 }
 
+/* Print the rule for a configuration.
+*/
+public static void ConfigPrint(FILE fp, config cfp)
+{
+    //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+    //ORIGINAL LINE: RulePrint(fp, cfp->rp, cfp->dot);
+    RulePrint(fp, new rule(cfp.rp), cfp.dot);
+}
+
 /* #define TEST */
 #if false
 	// /* Print a set */
-	//PRIVATE void SetPrint(out,set,lemp)
+	//PRIVATE void SetPrint(out, set, lemp)
 	//FILE *out;
 	//char *set;
 	//struct lemon *lemp;
@@ -5756,26 +6124,26 @@ public static void ConfigPrint(FILE fp, config cfp)
 	//	int i;
 	//	char *spacer;
 	//	spacer = "";
-	//	fprintf(out,"%12s[","");
-	//	for(i=0; i<lemp->nterminal; i++){
-	//		if( SetFind(set,i) ){
-	//			fprintf(out,"%s%s",spacer,lemp->symbols[i]->name);
+	//	fprintf(out, "%12s[", "");
+	//	for (i = 0; i<lemp->nterminal; i++) {
+	//		if (SetFind(set, i)) {
+	//			fprintf(out, "%s%s", spacer, lemp->symbols[i]->name);
 	//			spacer = " ";
 	//		}
 	//	}
-	//	fprintf(out,"]\n");
+	//	fprintf(out, "]\n");
 	//}
 	//
 	// /* Print a plink chain */
-	//PRIVATE void PlinkPrint(out,plp,tag)
+	//PRIVATE void PlinkPrint(out, plp, tag)
 	//FILE *out;
 	//struct plink *plp;
 	//char *tag;
 	//{
-	//	while( plp ){
-	//		fprintf(out,"%12s%s (state %2d) ","",tag,plp->cfp->stp->statenum);
-	//		ConfigPrint(out,plp->cfp);
-	//		fprintf(out,"\n");
+	//	while (plp) {
+	//		fprintf(out, "%12s%s (state %2d) ", "", tag, plp->cfp->stp->statenum);
+	//		ConfigPrint(out, plp->cfp);
+	//		fprintf(out, "\n");
 	//		plp = plp->next;
 	//	}
 	//}
@@ -5785,16 +6153,38 @@ public static void ConfigPrint(FILE fp, config cfp)
 ** nothing was actually printed.
 */
 public static int PrintAction(action ap, FILE fp, int indent)
-{
+{ // Indent by this amount -  Print the action here -  The action to print
     int result = 1;
     switch (ap.type)
     {
         case e_action.SHIFT:
-            fprintf(fp, "%*s shift  %d", indent, ap.sp.name, ap.x.stp.statenum);
-            break;
+            {
+                state stp = ap.x.stp;
+                fprintf(fp, "%*s shift        %-7d", indent, ap.sp.name, stp.statenum);
+                break;
+            }
         case e_action.REDUCE:
-            fprintf(fp, "%*s reduce %d", indent, ap.sp.name, ap.x.rp.index);
-            break;
+            {
+                //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+                //ORIGINAL LINE: struct rule *rp = ap->x.rp;
+                rule[] rp = new rule(ap.x.rp);
+                fprintf(fp, "%*s reduce       %-7d", indent, ap.sp.name, rp.iRule);
+                //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+                //ORIGINAL LINE: RulePrint(fp, rp, -1);
+                RulePrint(fp, new rule(rp), -1);
+                break;
+            }
+        case e_action.SHIFTREDUCE:
+            {
+                //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+                //ORIGINAL LINE: struct rule *rp = ap->x.rp;
+                rule[] rp = new rule(ap.x.rp);
+                fprintf(fp, "%*s shift-reduce %-7d", indent, ap.sp.name, rp.iRule);
+                //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+                //ORIGINAL LINE: RulePrint(fp, rp, -1);
+                RulePrint(fp, new rule(rp), -1);
+                break;
+            }
         case e_action.ACCEPT:
             fprintf(fp, "%*s accept", indent, ap.sp.name);
             break;
@@ -5803,15 +6193,15 @@ public static int PrintAction(action ap, FILE fp, int indent)
             break;
         case e_action.SRCONFLICT:
         case e_action.RRCONFLICT:
-            fprintf(fp, "%*s reduce %-3d ** Parsing conflict **", indent, ap.sp.name, ap.x.rp.index);
+            fprintf(fp, "%*s reduce       %-7d ** Parsing conflict **", indent, ap.sp.name, ap.x.rp.iRule);
             break;
         case e_action.SSCONFLICT:
-            fprintf(fp, "%*s shift  %-3d ** Parsing conflict **", indent, ap.sp.name, ap.x.stp.statenum);
+            fprintf(fp, "%*s shift        %-7d ** Parsing conflict **", indent, ap.sp.name, ap.x.stp.statenum);
             break;
         case e_action.SH_RESOLVED:
             if (showPrecedenceConflict != 0)
             {
-                fprintf(fp, "%*s shift  %-3d -- dropped by precedence", indent, ap.sp.name, ap.x.stp.statenum);
+                fprintf(fp, "%*s shift        %-7d -- dropped by precedence", indent, ap.sp.name, ap.x.stp.statenum);
             }
             else
             {
@@ -5821,7 +6211,7 @@ public static int PrintAction(action ap, FILE fp, int indent)
         case e_action.RD_RESOLVED:
             if (showPrecedenceConflict != 0)
             {
-                fprintf(fp, "%*s reduce %-3d -- dropped by precedence", indent, ap.sp.name, ap.x.rp.index);
+                fprintf(fp, "%*s reduce %-7d -- dropped by precedence", indent, ap.sp.name, ap.x.rp.iRule);
             }
             else
             {
@@ -5831,6 +6221,10 @@ public static int PrintAction(action ap, FILE fp, int indent)
         case e_action.NOT_USED:
             result = 0;
             break;
+    }
+    if (result != 0 && ap.spOpt != null)
+    {
+        fprintf(fp, "  /* because %s==%s */", ap.sp.name, ap.spOpt.name);
     }
     return result;
 }
@@ -5921,14 +6315,17 @@ public static int compute_action(lemon lemp, action ap)
         case e_action.SHIFT:
             act = ap.x.stp.statenum;
             break;
+        case e_action.SHIFTREDUCE:
+            act = ap.x.rp.iRule + lemp.nstate;
+            break;
         case e_action.REDUCE:
-            act = ap.x.rp.index + lemp.nstate;
+            act = ap.x.rp.iRule + lemp.nstate + lemp.nrule;
             break;
         case e_action.ERROR:
-            act = lemp.nstate + lemp.nrule;
+            act = lemp.nstate + lemp.nrule * 2;
             break;
         case e_action.ACCEPT:
-            act = lemp.nstate + lemp.nrule + 1;
+            act = lemp.nstate + lemp.nrule * 2 + 1;
             break;
         default:
             act = -1;
@@ -5959,7 +6356,7 @@ public static void tplt_xfer(ref string name, FILE in, FILE @out, ref int lineno
         {
             for (i = 0; line[i]; i++)
             {
-                if (line[i] == 'P' && string.Compare(line[i], 0, "Parse", 0, 5) == 0 && (i == 0 || !char.IsLetter(line[i - 1])))
+                if (line[i] == 'P' && string.Compare(line[i], 0, "Parse", 0, 5) == 0 && (i == 0 || !char.IsLetter((byte)(line[i - 1]))))
                 {
                     if (i > iStart)
                     {
@@ -6212,6 +6609,10 @@ public static string append_str(sbyte* zText, int n, int p1, int p2)
     string zInt = new string(new char[40]);
     if (zText == 0)
     {
+        if (append_str_used == 0 && append_str_z != 0)
+        {
+            append_str_z = null;
+        }
         append_str_used = 0;
         return append_str_z;
     }
@@ -6248,7 +6649,7 @@ public static string append_str(sbyte* zText, int n, int p1, int p2)
         }
         else
         {
-            append_str_z[append_str_used++] = c;
+            append_str_z[append_str_used++] = (sbyte)c;
         }
     }
     append_str_z = append_str_z.Substring(0, append_str_used);
@@ -6258,17 +6659,25 @@ public static string append_str(sbyte* zText, int n, int p1, int p2)
 private static string translate_code_newlinestr = "\n";
 
 /*
-** zCode is a string that is the action associated with a rule.  Expand
-** the symbols in this string so that the refer to elements of the parser
-** stack.
+** Write and transform the rp->code string so that symbols are expanded.
+** Populate the rp->codePrefix and rp->codeSuffix strings, as appropriate.
+**
+** Return 1 if the expanded code requires that "yylhsminor" local variable
+** to be defined.
 */
-public static void translate_code(lemon lemp, rule rp)
+public static int translate_code(lemon lemp, rule rp)
 {
     string cp;
     string xp;
     int i;
+    int rc = 0; // True if yylhsminor is used
+    int dontUseRhs0 = 0; // If true, use of left-most RHS label is illegal
+    string zSkip = 0; // The zOvwrt comment within rp->code, or NULL
     sbyte lhsused = 0; // True if the LHS element has been used
+    sbyte lhsdirect; // True if LHS writes directly into stack
     string used = new string(new char[DefineConstants.MAXRHS]); // True for each RHS element which is used
+    string zLhs = new string(new char[50]); // Convert the LHS symbol into this string
+    string zOvwrt = new string(new char[900]); // Comment that to allow LHS to overwrite RHS
 
     for (i = 0; i < rp.nrhs; i++)
     {
@@ -6282,6 +6691,75 @@ public static void translate_code(lemon lemp, rule rp)
         //		static sbyte newlinestr[2] = { '\n', '\0' };
         rp.code = translate_code_newlinestr;
         rp.line = rp.ruleline;
+        rp.noCode = 1;
+    }
+    else
+    {
+        rp.noCode = 0;
+    }
+
+
+    if (rp.nrhs == 0)
+    {
+        /* If there are no RHS symbols, then writing directly to the LHS is ok */
+        lhsdirect = 1;
+    }
+    else if (rp.rhsalias[0] == 0)
+    {
+        /* The left-most RHS symbol has no value.  LHS direct is ok.  But
+        ** we have to call the distructor on the RHS symbol first. */
+        lhsdirect = 1;
+        //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+        //ORIGINAL LINE: if (has_destructor(rp->rhs[0], lemp))
+        if (has_destructor(new symbol(rp.rhs[0]), lemp) != 0)
+        {
+            append_str(0, 0, 0, 0);
+            append_str("  yy_destructor(yypParser,%d,&yymsp[%d].minor);\n", 0, rp.rhs[0].index, 1 - rp.nrhs);
+            rp.codePrefix = Strsafe(append_str(0, 0, 0, 0));
+            rp.noCode = 0;
+        }
+    }
+    else if (rp.lhsalias == 0)
+    {
+        /* There is no LHS value symbol. */
+        lhsdirect = 1;
+    }
+    else if (string.Compare(rp.lhsalias, rp.rhsalias[0]) == 0)
+    {
+        /* The LHS symbol and the left-most RHS symbol are the same, so
+        ** direct writing is allowed */
+        lhsdirect = 1;
+        lhsused = 1;
+        used = StringFunctions.ChangeCharacter(used, 0, 1);
+        if (rp.lhs.dtnum != rp.rhs[0].dtnum)
+        {
+            ErrorMsg(lemp.filename, rp.ruleline, "%s(%s) and %s(%s) share the same label but have " + "different datatypes.", rp.lhs.name, rp.lhsalias, rp.rhs[0].name, rp.rhsalias[0]);
+            lemp.errorcnt++;
+        }
+    }
+    else
+    {
+        lemon_sprintf(zOvwrt, "/*%s-overwrites-%s*/", rp.lhsalias, rp.rhsalias[0]);
+        zSkip = StringFunctions.StrStr(rp.code, zOvwrt);
+        if (zSkip != 0)
+        {
+            /* The code contains a special comment that indicates that it is safe
+            ** for the LHS label to overwrite left-most RHS label. */
+            lhsdirect = 1;
+        }
+        else
+        {
+            lhsdirect = 0;
+        }
+    }
+    if (lhsdirect != 0)
+    {
+        zLhs = string.Format("yymsp[{0:D}].minor.yy{1:D}", 1 - rp.nrhs, rp.lhs.dtnum);
+    }
+    else
+    {
+        rc = 1;
+        zLhs = string.Format("yylhsminor.yy{0:D}", rp.lhs.dtnum);
     }
 
     append_str(0, 0, 0, 0);
@@ -6289,10 +6767,17 @@ public static void translate_code(lemon lemp, rule rp)
     /* This const cast is wrong but harmless, if we're careful. */
     for (cp = (string)rp.code; cp != 0; cp++)
     {
-        if (char.IsLetter(cp) && (cp == rp.code || (!char.IsLetterOrDigit(cp[-1]) && cp[-1] != '_')))
+        if (cp == zSkip)
+        {
+            append_str(zOvwrt, 0, 0, 0);
+            cp += ((int)zOvwrt.Length) - 1;
+            dontUseRhs0 = 1;
+            continue;
+        }
+        if (char.IsLetter((byte)(cp)) && (cp == rp.code || (!char.IsLetterOrDigit((byte)(cp[-1])) && cp[-1] != '_')))
         {
             sbyte saved;
-            for (xp = cp[1]; char.IsLetterOrDigit(xp) || xp == '_'; xp++)
+            for (xp = cp[1]; char.IsLetterOrDigit((byte)(xp)) || xp == '_'; xp++)
             {
                 ;
             }
@@ -6300,7 +6785,7 @@ public static void translate_code(lemon lemp, rule rp)
             xp = 0;
             if (rp.lhsalias != 0 && string.Compare(cp, rp.lhsalias) == 0)
             {
-                append_str("yygotominor.yy%d", 0, rp.lhs.dtnum, 0);
+                append_str(zLhs, 0, 0, 0);
                 cp = xp;
                 lhsused = 1;
             }
@@ -6310,7 +6795,12 @@ public static void translate_code(lemon lemp, rule rp)
                 {
                     if (rp.rhsalias[i] != 0 && string.Compare(cp, rp.rhsalias[i]) == 0)
                     {
-                        if (cp != rp.code && cp[-1] == '@')
+                        if (i == 0 && dontUseRhs0 != 0)
+                        {
+                            ErrorMsg(lemp.filename, rp.ruleline, "Label %s used after '%s'.", rp.rhsalias[0], zOvwrt);
+                            lemp.errorcnt++;
+                        }
+                        else if (cp != rp.code && cp[-1] == '@')
                         {
                             /* If the argument is of the form @X then substituted
                             ** the token number of X, not the value of X */
@@ -6341,6 +6831,14 @@ public static void translate_code(lemon lemp, rule rp)
         append_str(cp, 1, 0, 0);
     } // End loop
 
+    /* Main code generation completed */
+    cp = append_str(0, 0, 0, 0);
+    if (cp != 0 && cp[0])
+    {
+        rp.code = Strsafe(cp);
+    }
+    append_str(0, 0, 0, 0);
+
     /* Check to make sure the LHS has been used */
     if (rp.lhsalias != 0 && lhsused == 0)
     {
@@ -6348,34 +6846,63 @@ public static void translate_code(lemon lemp, rule rp)
         lemp.errorcnt++;
     }
 
-    /* Generate destructor code for RHS symbols which are not used in the
-    ** reduce code */
+    /* Generate destructor code for RHS minor values which are not referenced.
+    ** Generate error messages for unused labels and duplicate labels.
+    */
     for (i = 0; i < rp.nrhs; i++)
     {
-        if (rp.rhsalias[i] != 0 && !used[i])
+        if (rp.rhsalias[i] != 0)
         {
-            ErrorMsg(lemp.filename, rp.ruleline, "Label %s for \"%s(%s)\" is never used.", rp.rhsalias[i], rp.rhs[i].name, rp.rhsalias[i]);
-            lemp.errorcnt++;
+            if (i > 0)
+            {
+                int j;
+                if (rp.lhsalias != 0 && string.Compare(rp.lhsalias, rp.rhsalias[i]) == 0)
+                {
+                    ErrorMsg(lemp.filename, rp.ruleline, "%s(%s) has the same label as the LHS but is not the left-most " + "symbol on the RHS.", rp.rhs[i].name, rp.rhsalias);
+                    lemp.errorcnt++;
+                }
+                for (j = 0; j < i; j++)
+                {
+                    if (rp.rhsalias[j] != 0 && string.Compare(rp.rhsalias[j], rp.rhsalias[i]) == 0)
+                    {
+                        ErrorMsg(lemp.filename, rp.ruleline, "Label %s used for multiple symbols on the RHS of a rule.", rp.rhsalias[i]);
+                        lemp.errorcnt++;
+                        break;
+                    }
+                }
+            }
+            if (!used[i])
+            {
+                ErrorMsg(lemp.filename, rp.ruleline, "Label %s for \"%s(%s)\" is never used.", rp.rhsalias[i], rp.rhs[i].name, rp.rhsalias[i]);
+                lemp.errorcnt++;
+            }
         }
-        else if (rp.rhsalias[i] == 0)
+        //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
+        //ORIGINAL LINE: else if (i>0 && has_destructor(rp->rhs[i], lemp))
+        else if (i > 0 && has_destructor(new symbol(rp.rhs[i]), lemp) != 0)
         {
-            //C++ TO C# CONVERTER WARNING: The following line was determined to be a copy constructor call - this should be verified and a copy constructor should be created if it does not yet exist:
-            //ORIGINAL LINE: if (has_destructor(rp->rhs[i], lemp))
-            if (has_destructor(new symbol(rp.rhs[i]), lemp) != 0)
-            {
-                append_str("  yy_destructor(yypParser,%d,&yymsp[%d].minor);\n", 0, rp.rhs[i].index, i - rp.nrhs + 1);
-            }
-            else
-            {
-                /* No destructor defined for this term */
-            }
+            append_str("  yy_destructor(yypParser,%d,&yymsp[%d].minor);\n", 0, rp.rhs[i].index, i - rp.nrhs + 1);
         }
     }
-    if (rp.code != 0)
+
+    /* If unable to write LHS values directly into the stack, write the
+    ** saved LHS value now. */
+    if (lhsdirect == 0)
     {
-        cp = append_str(0, 0, 0, 0);
-        rp.code = Strsafe(cp != 0 ? cp : "");
+        append_str("  yymsp[%d].minor.yy%d = ", 0, 1 - rp.nrhs, rp.lhs.dtnum);
+        append_str(zLhs, 0, 0, 0);
+        append_str(";\n", 0, 0, 0);
     }
+
+    /* Suffix code generation complete */
+    cp = append_str(0, 0, 0, 0);
+    if (cp != 0 && cp[0])
+    {
+        rp.codeSuffix = Strsafe(cp);
+        rp.noCode = 0;
+    }
+
+    return rc;
 }
 
 /*
@@ -6386,6 +6913,19 @@ public static void emit_code(FILE @out, rule rp, lemon lemp, ref int lineno)
 {
     //C++ TO C# CONVERTER TODO TASK: Pointer arithmetic is detected on this variable, so pointers on this variable are left unchanged:
     sbyte* cp;
+
+    /* Setup code prior to the #line directive */
+    if (rp.codePrefix != 0 && rp.codePrefix[0])
+    {
+        fprintf(@out, "{%s", rp.codePrefix);
+        for (cp = rp.codePrefix; *cp; cp++)
+        {
+            if (*cp == '\n')
+            {
+                lineno++;
+            }
+        }
+    }
 
     /* Generate code to do the reduce action */
     if (rp.code != 0)
@@ -6402,7 +6942,7 @@ public static void emit_code(FILE @out, rule rp, lemon lemp, ref int lineno)
             {
                 lineno++;
             }
-        } // End loop
+        }
         fprintf(@out, "}\n");
         lineno++;
         if (lemp.nolinenosflag == 0)
@@ -6410,7 +6950,26 @@ public static void emit_code(FILE @out, rule rp, lemon lemp, ref int lineno)
             lineno++;
             tplt_linedir(@out, lineno, lemp.outname);
         }
-    } // End if( rp->code )
+    }
+
+    /* Generate breakdown code that occurs after the #line directive */
+    if (rp.codeSuffix != 0 && rp.codeSuffix[0])
+    {
+        fprintf(@out, "%s", rp.codeSuffix);
+        for (cp = rp.codeSuffix; *cp; cp++)
+        {
+            if (*cp == '\n')
+            {
+                lineno++;
+            }
+        }
+    }
+
+    if (rp.codePrefix != 0)
+    {
+        fprintf(@out, "}\n");
+        lineno++;
+    }
 
     return;
 }
@@ -6500,7 +7059,7 @@ public static void print_stack_union(FILE @out, lemon lemp, ref int plineno, int
             cp = lemp.vartype;
         }
         j = 0;
-        while (char.IsWhiteSpace(cp))
+        while (char.IsWhiteSpace((byte)(cp)))
         {
             cp = cp.Substring(1);
         }
@@ -6508,7 +7067,7 @@ public static void print_stack_union(FILE @out, lemon lemp, ref int plineno, int
         {
             stddt[j++] = cp++;
         }
-        while (j > 0 && char.IsWhiteSpace(stddt[j - 1]))
+        while (j > 0 && char.IsWhiteSpace((byte)(stddt[j - 1])))
         {
             j--;
         }
@@ -6598,41 +7157,6 @@ public static void print_stack_union(FILE @out, lemon lemp, ref int plineno, int
 }
 
 /*
-** Return the name of a C datatype able to represent values between
-** lwr and upr, inclusive.
-*/
-internal static string minimum_size_type(int lwr, int upr)
-{
-    if (lwr >= 0)
-    {
-        if (upr <= 255)
-        {
-            return "unsigned char";
-        }
-        else if (upr < 65535)
-        {
-            return "unsigned short int";
-        }
-        else
-        {
-            return "unsigned int";
-        }
-    }
-    else if (lwr >= -127 && upr <= 127)
-    {
-        return "signed char";
-    }
-    else if (lwr >= -32767 && upr < 32767)
-    {
-        return "short";
-    }
-    else
-    {
-        return "int";
-    }
-}
-
-/*
 ** Compare to axset structures for sorting purposes
 */
 internal static int axset_compare(object a, object b)
@@ -6643,7 +7167,7 @@ internal static int axset_compare(object a, object b)
     c = p2.nAction - p1.nAction;
     if (c == 0)
     {
-        c = p2.iOrder - p1.iOrder;
+        c = p1.iOrder - p2.iOrder;
     }
     Debug.Assert(c != 0 || p1 == p2);
     return c;

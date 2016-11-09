@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>LemonCSharp</RootNamespace>
     <AssemblyName>LemonCSharp</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion> 
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
@@ -45,7 +45,8 @@
   <ItemGroup>
     <None Include="calc.y" />
     <Content Include="lemon.c" />
-    <Content Include="Lemon.cs.txt" />
+    <None Include="Lemon_csharp.cs" />
+    <Compile Include="lemon.cs" />
     <Compile Include="Tokenizer.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
