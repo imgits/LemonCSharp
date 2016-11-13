@@ -51,7 +51,7 @@ namespace LemonCSharp
         public int iDflt; // Default action
     }
 
-    public class lemon
+    public partial class Lemon
     {
         public List<State> sorted= new List<State>(); // Table of states sorted by state number
         public Rule rule; // List of all rules
@@ -89,15 +89,48 @@ namespace LemonCSharp
         public int has_fallback; // True if any %fallback is seen in the grammar
         public int nolinenosflag; // True if #line statements should not be printed
         public string argv0; // Name of the program
+
+        /********************重新定义************************/
+        public Token CodeToken;
+        public Token IncludeToken;
+        public Token StartToken;
+
     }
 
-    public class Parser
+    public enum ParserState
+    {
+        INITIALIZE,
+        WAITING_FOR_DECL_OR_RULE,
+        WAITING_FOR_DECL_KEYWORD,
+        WAITING_FOR_DECL_ARG,
+        WAITING_FOR_PRECEDENCE_SYMBOL,
+        WAITING_FOR_ARROW,
+        IN_RHS,
+        LHS_ALIAS_1,
+        LHS_ALIAS_2,
+        LHS_ALIAS_3,
+        RHS_ALIAS_1,
+        RHS_ALIAS_2,
+        PRECEDENCE_MARK_1,
+        PRECEDENCE_MARK_2,
+        RESYNC_AFTER_RULE_ERROR,
+        RESYNC_AFTER_DECL_ERROR,
+        WAITING_FOR_DESTRUCTOR_SYMBOL,
+        WAITING_FOR_DATATYPE_SYMBOL,
+        WAITING_FOR_FALLBACK_ID,
+        WAITING_FOR_WILDCARD_ID,
+        WAITING_FOR_CLASS_ID,
+        WAITING_FOR_CLASS_TOKEN
+    }
+
+
+    public class Parser1
     {
         public string filename; // Name of the input file
         public int tokenlineno; // Linenumber at which current token starts
         public int errorcnt; // Number of errors so far
         public string tokenstart; // Text of current token
-        public lemon gp=new lemon(); // Global state vector
+        public Lemon gp=new Lemon(); // Global state vector
         public ParserState state; // The state of the parser
         public Symbol fallback; // The fallback token
         public Symbol tkclass; // Token class symbol
@@ -149,7 +182,7 @@ namespace LemonCSharp
     }
     public enum Assoc
     {
-        LEFT,
+        LEFT=0,
         RIGHT,
         NONE,
         UNK
@@ -158,6 +191,7 @@ namespace LemonCSharp
     public class Symbol
     {
         public string name; // Name of the symbol
+        public string Alias;
         public int index; // Index number for this symbol
         public SymbolType type; // Symbols are all either TERMINALS or NTs
         public Rule rule; // Linked list of rules of this (if an NT)
@@ -181,7 +215,13 @@ namespace LemonCSharp
 
         public Symbol(string text)
         {
-
+            this.name = text;
+            this.prec = -1;
+            if (char.IsUpper(text[0]))
+            {
+                this.type = SymbolType.TERMINAL;
+            }
+            else this.type = SymbolType.NONTERMINAL;
         }
     }
 

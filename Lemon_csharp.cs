@@ -5385,10 +5385,13 @@ internal static void parseonetoken(pstate psp)
                 psp.state = e_state.RESYNC_AFTER_RULE_ERROR;
             }
             break;
+			
+			//以上已将产生式左边处理完毕
+			//以下开始处理产生式右边内容
         case e_state.IN_RHS:
             if (x[0] == '.')
-            {
-                rule rp;
+            {//一条产生式处理完毕
+                rule rp = new rule();
                 //C++ TO C# CONVERTER TODO TASK: The memory management function 'calloc' has no equivalent in C#:
                 rp = (rule)calloc(sizeof(rule) + sizeof(symbol) * psp.nrhs + sizeof(string) * psp.nrhs, 1);
                 if (rp == 0)

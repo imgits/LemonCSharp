@@ -6,9 +6,12 @@ using System.Threading.Tasks;
 
 namespace LemonCSharp
 {
-    public enum TokenType
+    public delegate bool CharIsHandler(char ch);
+    public delegate Token TokenHandler(char ch);
+
+    public enum TokenType : int
     {
-        NULL=0,
+        NULL = 0,
         CHAR_0x00 = 0x00,
         CHAR_0x01 = 0x01,
         CHAR_0x02 = 0x02,
@@ -42,21 +45,21 @@ namespace LemonCSharp
         CHAR_0x1E = 0x1E,
         CHAR_0x1F = 0x1F,
         CHAR_0x20 = 0x20,//
-        CHAR_0x21 = 0x21, NOT=0x21,EXCL=0x21,//!     exclamation mark 惊叹号
-        CHAR_0x22 = 0x22, DQUOT=0x22,//"    double quotation marks 双引号
-        CHAR_0x23 = 0x23, SHARP =0x23,//#
-        CHAR_0x24 = 0x24, DOLLAR=0x24,//$
-        CHAR_0x25 = 0x25, PERCENT=0x25,MOD=0x25,//%
-        CHAR_0x26 = 0x26, AND=0x26,//&
+        CHAR_0x21 = 0x21, NOT = 0x21, EXCL = 0x21,//!     exclamation mark 惊叹号
+        CHAR_0x22 = 0x22, DQUOT = 0x22,//"    double quotation marks 双引号
+        CHAR_0x23 = 0x23, SHARP = 0x23,//#
+        CHAR_0x24 = 0x24, DOLLAR = 0x24,//$
+        CHAR_0x25 = 0x25, PERCENT = 0x25, MOD = 0x25,//%
+        CHAR_0x26 = 0x26, AND = 0x26,//&
         CHAR_0x27 = 0x27, SQUOT = 0x27,  //'    single quotation marks 单引号
-        CHAR_0x28 = 0x28, LPAR=0x28,//( parenthesis or round brackets 圆括号
-        CHAR_0x29 = 0x29, RPAR=0x29,//) parenthesis or round brackets 圆括号
-        CHAR_0x2A = 0x2A, MUL=0x2A, STAR= 0x2A,//*
-        CHAR_0x2B = 0x2B, ADD=0x2B, PLUS= 0x2B,//+
-        CHAR_0x2C = 0x2C, COMMA=0x2C,//,
+        CHAR_0x28 = 0x28, LPAR = 0x28,//( parenthesis or round brackets 圆括号
+        CHAR_0x29 = 0x29, RPAR = 0x29,//) parenthesis or round brackets 圆括号
+        CHAR_0x2A = 0x2A, MUL = 0x2A, STAR = 0x2A,//*
+        CHAR_0x2B = 0x2B, ADD = 0x2B, PLUS = 0x2B,//+
+        CHAR_0x2C = 0x2C, COMMA = 0x2C,//,
         CHAR_0x2D = 0x2D, SUB = 0x2D, MIMUS = 0x2D,//-
-        CHAR_0x2E = 0x2E, DOT = 0x2E, PERIOD =0x2E,//. period or full stop 句号
-        CHAR_0x2F = 0x2F, DIV=0x2F, DIVIDE=0x2F,SLASH=0x2F,/// divided slash or virgule or diagonal mark 斜线号
+        CHAR_0x2E = 0x2E, DOT = 0x2E, PERIOD = 0x2E,//. period or full stop 句号
+        CHAR_0x2F = 0x2F, DIV = 0x2F, DIVIDE = 0x2F, SLASH = 0x2F,/// divided slash or virgule or diagonal mark 斜线号
         CHAR_0 = 0x30,//0
         CHAR_1 = 0x31,//1
         CHAR_2 = 0x32,//2
@@ -67,13 +70,13 @@ namespace LemonCSharp
         CHAR_7 = 0x37,//7
         CHAR_8 = 0x38,//8
         CHAR_9 = 0x39,//9
-        CHAR_0x3A = 0x3A, COLON=0x3A,//: colon 冒号
-        CHAR_0x3B = 0x3B, SEMI=0x3B,//; semicolon 分号
-        CHAR_0x3C = 0x3C, LE=0x3C, LANGLE=0x3C,//< Angle brackets 尖括号
-        CHAR_0x3D = 0x3D, EQ=0x3D,//=
-        CHAR_0x3E = 0x3E, GE=0x3E, RANGLE = 0x3E,//>
-        CHAR_0x3F = 0x3F, ASK=0x3F, QUESTION=0x3F,//?
-        CHAR_0x40 = 0x40, AT=0x40,//@
+        CHAR_0x3A = 0x3A, COLON = 0x3A,//: colon 冒号
+        CHAR_0x3B = 0x3B, SEMI = 0x3B,//; semicolon 分号
+        CHAR_0x3C = 0x3C, LE = 0x3C, LANGLE = 0x3C,//< Angle brackets 尖括号
+        CHAR_0x3D = 0x3D, EQ = 0x3D,//=
+        CHAR_0x3E = 0x3E, GE = 0x3E, RANGLE = 0x3E,//>
+        CHAR_0x3F = 0x3F, ASK = 0x3F, QUESTION = 0x3F,//?
+        CHAR_0x40 = 0x40, AT = 0x40,//@
         CHAR_A = 0x41,//A
         CHAR_B = 0x42,//B
         CHAR_C = 0x43,//C
@@ -100,11 +103,11 @@ namespace LemonCSharp
         CHAR_X = 0x58,//X
         CHAR_Y = 0x59,//Y
         CHAR_Z = 0x5A,//Z
-        CHAR_0x5B = 0x5B, LSQUARE=0x5B,//[ square brackets 方括号
-        CHAR_0x5C = 0x5C, BSLASH=0x5C,//\ backslash; trailing slash; bslash 反斜杠
+        CHAR_0x5B = 0x5B, LSQUARE = 0x5B,//[ square brackets 方括号
+        CHAR_0x5C = 0x5C, BSLASH = 0x5C,//\ backslash; trailing slash; bslash 反斜杠
         CHAR_0x5D = 0x5D, RSQUARE = 0x5D,//]
-        CHAR_0x5E = 0x5E, POWER=0x5E,//^
-        CHAR_0x5F = 0x5F, UNDERLINE=0x5F,//_ underline
+        CHAR_0x5E = 0x5E, POWER = 0x5E,//^
+        CHAR_0x5F = 0x5F, UNDERLINE = 0x5F,//_ underline
         CHAR_0x60 = 0x60, //`
         CHAR_a = 0x61,//a
         CHAR_b = 0x62,//b
@@ -132,45 +135,21 @@ namespace LemonCSharp
         CHAR_x = 0x78,//x
         CHAR_y = 0x79,//y
         CHAR_z = 0x7A,//z
-        CHAR_0x7B = 0x7B, LBRACES=0x7B,//{ curly brackets or braces 大括号
-        CHAR_0x7C = 0x7C, OR=0x7C,//|
+        CHAR_0x7B = 0x7B, LBRACES = 0x7B,//{ curly brackets or braces 大括号
+        CHAR_0x7C = 0x7C, OR = 0x7C,//|
         CHAR_0x7D = 0x7D, RBRACES = 0x7D,//} curly brackets or braces 大括号
-        CHAR_0x7E = 0x7E, NEG=0x7E,//~
+        CHAR_0x7E = 0x7E, NEG = 0x7E,//~
 
-        NUM = 256, FLOAT, KEY, ID, STRING, SPECIAL, ERROR,
+        NUM = 0x100, INT = NUM, FLOAT,  ID, KEYWORD, STRING, 
+        SINGLE_LINE_COMMENT, MULTI_LINE_COMMENT,
+        ERROR,
+
+        CODE_BLOCK = 0x10000,
+        DEFINE,
         ARROW,
-        Set,Decl,
-        CodeBlock,
-        SingleLineComment, MultiLineComment,
-    };
 
-    public enum ParserState
-    {
-        INITIALIZE,
-        WAITING_FOR_DECL_OR_RULE,
-        WAITING_FOR_DECL_KEYWORD,
-        WAITING_FOR_DECL_ARG,
-        WAITING_FOR_PRECEDENCE_SYMBOL,
-        WAITING_FOR_ARROW,
-        IN_RHS,
-        LHS_ALIAS_1,
-        LHS_ALIAS_2,
-        LHS_ALIAS_3,
-        RHS_ALIAS_1,
-        RHS_ALIAS_2,
-        PRECEDENCE_MARK_1,
-        PRECEDENCE_MARK_2,
-        RESYNC_AFTER_RULE_ERROR,
-        RESYNC_AFTER_DECL_ERROR,
-        WAITING_FOR_DESTRUCTOR_SYMBOL,
-        WAITING_FOR_DATATYPE_SYMBOL,
-        WAITING_FOR_FALLBACK_ID,
-        WAITING_FOR_WILDCARD_ID,
-        WAITING_FOR_CLASS_ID,
-        WAITING_FOR_CLASS_TOKEN
-    } 
-     
- 
+        LAST_ONE =ERROR
+    };
 
     public class Token
     {
@@ -184,11 +163,12 @@ namespace LemonCSharp
 
         public string text;
         public TokenType type;
+
         public Token(int line, int column, int offset)
         {
             start_line = end_line = line;
-            start_column = end_column = column-1;
-            start_offset = end_offset = offset-1;
+            start_column = end_column = column;
+            start_offset = end_offset = offset;
             type = TokenType.NULL;
         }
 
@@ -198,128 +178,201 @@ namespace LemonCSharp
             end_column = column;
             end_offset = offset;
         }
+
+        public bool IsType(char ch)
+        {
+            return ((int)type == (int)ch);
+        }
+
+        public bool IsType(TokenType ttype)
+        {
+            return (this.type == ttype);
+        }
     }
 
-    class Tokenizer
+    public class Tokenizer
     {
         string Text;
-        int scan_line;
-        int scan_column;
-        int scan_offset;
-
-        int last_line_length;
-
+        int row;
+        int col;
+        int offset;
+        bool IgnoreSpaceToken { get; set; }
         Token cur_token;
-        const char EOF = (char)0;
+        public const char EOF = (char)0;
+        Dictionary<char, TokenHandler> TokenHandlers= new Dictionary<char, TokenHandler>();
+        public TokenHandler DefaultTokenHandler { get; set; }
 
+        public string DelimitationChars = " \t\r\n([{.";
+        public string WhiteSpaceChars = " \t\r\n";
 
         public Tokenizer(string text)
         {
             this.Text = text;
-            scan_line = 0;
-            scan_column = 0;
-            scan_offset = 0;
+            row = 0;
+            col = 0;
+            offset = 0;
             cur_token = null;
-
-            last_line_length = -1;
+            IgnoreSpaceToken = true;
+            SetTokenHandler('/',  Comment_Token);
+            SetTokenHandler('\'', String_Token);
+            SetTokenHandler('\"', String_Token);
+            DefaultTokenHandler = Default_Token_handler;
         }
 
-        char read_char()
-        {//移动读指针
-            if (scan_offset >= Text.Length) return EOF;
-            char ch = Text[scan_offset++];
-            if (ch == '\n')
-            {
-                last_line_length = scan_column;
-                scan_line++;
-                scan_column = 0;
-            }
-            else scan_column++;
-            return ch;
-        }
-
-        char unread_char()
+        public virtual string TokenName(TokenType TkType)
         {
-            scan_offset--;
-            if (scan_offset >= Text.Length) return EOF;
-            char ch = Text[scan_offset];
+            if (TkType < TokenType.LAST_ONE)
+            {
+                return Enum.GetName(typeof(TokenType), TkType);
+            }
+            else
+            {
+                return ((uint)TkType).ToString();
+            }
+        }
+
+        public void SetTokenHandler(char ch, TokenHandler handler)
+        {
+            if (handler == null && TokenHandlers.ContainsKey(ch))
+            {
+                TokenHandlers.Remove(ch);
+            }
+            else TokenHandlers[ch] = handler;
+        }
+
+        public char read_char()
+        {//先移动指针再读
+            if (offset >= Text.Length) return EOF;
+            char ch = Text[offset++];
             if (ch == '\n')
             {
-                scan_line--;
-                scan_column = last_line_length;
-                last_line_length =  - 1;
+                row++;
+                col = 0;
             }
-            else scan_column--;
+            else col++;
             return ch;
         }
 
-        char look_ahead(int step)
-        {//不移动读指针
-            return ((step <1) || scan_offset + (step-1) >= Text.Length) ? EOF : Text[scan_offset + (step-1)];
+        public char peek_char()
+        {
+            return (offset >= Text.Length) ? EOF : Text[offset];
         }
 
-        char next_char1()
+        public char next_char1()
         {//不移动读指针
-            return (scan_offset + 0 >= Text.Length) ? EOF : Text[scan_offset + 0];
+            return (offset + 0 >= Text.Length) ? EOF : Text[offset + 0];
         }
 
-        char next_char2()
+        public char next_char2()
         {//不移动读指针
-            return (scan_offset + 1 >= Text.Length) ? EOF : Text[scan_offset + 1];
+            return (offset + 1 >= Text.Length) ? EOF : Text[offset + 1];
         }
 
-        char next_char3()
+        public char next_charX(int x)
         {//不移动读指针
-            return (scan_offset + 2 >= Text.Length) ? EOF : Text[scan_offset + 2];
+            if (x <= 0) return EOF;
+            x--;
+            return (offset + x >= Text.Length) ? EOF : Text[offset + x];
         }
 
-        const string white_space_chars = " \t\r\n";
-        void skip_white_space()
+        public void skip_white_space()
         {//返回WhiteSpace之后的第一个字符
-            for (char ch = look_ahead(1); ch!= EOF; read_char(), ch = look_ahead(1))
+            for (char ch = peek_char(); ch != EOF; read_char(),ch = peek_char())
             {
-                if (!is_white_space(ch)) break;
+                if (!is_white_space(ch))
+                {
+                    break;
+                }
             }
         }
 
-        bool is_white_space(char ch)
+        public virtual bool is_white_space(char ch)
         {
-            return white_space_chars.IndexOf(ch) >= 0;
+            return WhiteSpaceChars.IndexOf(ch) >= 0;
+        }
+
+        public virtual bool is_delimitation_char(char ch)
+        {
+            return DelimitationChars.IndexOf(ch) >= 0;
+        }
+
+        public bool start_with(char start_ch)
+        {
+            if (offset >= Text.Length) return false;
+            return start_ch == Text[offset];
+        }
+
+        public bool start_with(char start_ch1, char start_ch2)
+        {
+            if (offset + 1>= Text.Length) return false;
+            return (start_ch1 == Text[offset]) && (start_ch2 == Text[offset+1]);
+        }
+
+        public bool start_with(char start_ch1, char start_ch2, char start_ch3)
+        {
+            if (offset + 2 >= Text.Length) return false;
+            return (start_ch1 == Text[offset]) &&
+                (start_ch2 == Text[offset + 1]) &&
+                (start_ch3 == Text[offset + 2]);
         }
 
         bool start_with(string str)
         {
-            if (scan_offset + str.Length >= Text.Length) return false;
-            return str.Equals(Text.Substring(scan_offset, str.Length), StringComparison.Ordinal);
+            if (offset + str.Length >= Text.Length) return false;
+            string substr = Text.Substring(offset, str.Length);
+            return str == substr;
         }
 
-        bool skip_chars(int count=1)
+        public bool skip_chars(int count = 1)
         {//移动读指针，跟踪处理行、列和偏移量
-            if (count < 0) return false;
-            for (int i = 0; i < count; i++)
+            if (count <= 0) return false;
+            for (int i = 0;  i < count; i++)
             {
-                if (read_char()== EOF) return false;
+                if (offset >= Text.Length)  return false;
+                char ch = Text[offset++];
+                if (ch == '\n')
+                {
+                    row++;
+                    col = 0;
+                }
+                else col++;
             }
             return true;
         }
 
-        bool skip_until(char end_ch)
-        {// 移动读指针，跟踪处理行、列和偏移量
-            for (char ch = look_ahead(1); ch != EOF ; read_char(), ch = look_ahead(1))
+        public bool skip_line()
+        {//移动读指针，跟踪处理行、列和偏移量
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
-                if (ch == end_ch) return true;
+                if (ch == '\n')
+                {
+                    read_char();
+                    return true;
+                }
             }
             return false;
         }
 
-        bool skip_until(string end_str)
+        public bool skip_until(char end_ch)
+        {//移动读指针，跟踪处理行、列和偏移量
+            for (char ch = read_char(); ch != EOF; ch=read_char())
+            {
+                if (ch == end_ch)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public bool skip_until(string end_str)
         {// 移动读指针，跟踪处理行、列和偏移量
             char ch0 = end_str[0];
-            for (char ch = look_ahead(1); ch != EOF; read_char(), ch = look_ahead(1))
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
                 if (ch == ch0)
                 {
-                    string substr = Text.Substring(scan_offset, end_str.Length);
+                    string substr = Text.Substring(offset, end_str.Length);
                     if (end_str.Equals(substr, StringComparison.Ordinal))
                     {
                         skip_chars(end_str.Length);
@@ -330,463 +383,215 @@ namespace LemonCSharp
             return false;
         }
 
-        void skip_line()
+        public bool skip_if(CharIsHandler char_is)
         {
-            skip_until('\n');
-        }
-
-        bool skip_string(char start_ch, bool process_escape=true)
-        {//处理C语言转义字符
-            char prev_ch = EOF;
-            for (char ch = read_char(); (ch != EOF); ch = read_char())
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
-                if (ch == start_ch)
+                if (!char_is(ch))
                 {
-                    if (!process_escape || prev_ch != '\\')
-                    {
-                        return true;
-                    }
+                    return true;
                 }
-                if (prev_ch == '\\') prev_ch = EOF;
-                else prev_ch = ch;
             }
             return false;
         }
 
-        Token end_token(TokenType tktype = TokenType.NULL)
+        public Token end_token(TokenType tktype = TokenType.NULL)
         {
-            cur_token.End(scan_line, scan_column, scan_offset);
+            cur_token.End(row, col, offset);
             cur_token.text = Text.Substring(cur_token.start_offset, cur_token.end_offset - cur_token.start_offset);
             if (tktype != TokenType.NULL) cur_token.type = tktype;
             if (cur_token.text.Length == 0) cur_token.type = TokenType.ERROR;
-            string tk = string.Format("[{0},{1}] {2} : {3}", cur_token.start_line, cur_token.start_column, cur_token.type, cur_token.text);
+            string tk = string.Format("[{0},{1}] {2} : {3}", 
+                cur_token.start_line+1, 
+                cur_token.start_column+1, 
+                TokenName(cur_token.type), 
+                cur_token.text);
             Console.WriteLine(tk);
             return cur_token;
         }
 
-        Token bad_token()
+        public Token bad_token()
         {
             return end_token(TokenType.ERROR);
         }
 
-        Token codeblock_token()
-        {//代码块 {}
-            char ch, next_ch;
-            int level = 1;
-            for (ch = read_char(); ch!= EOF; ch = read_char())
+        protected virtual Token Default_Token_handler(char ch)
+        {
+            if (char.IsDigit(ch))
             {
-                next_ch = next_char1();
-                if (ch == '{')
+                if (ch == '0')
                 {
-                    level++;
+                    char next_ch = next_char1();
+                    if (next_ch == 'x' || next_ch == 'X')
+                    {
+                        ch = read_char();//跳过x|X
+                        return Hex_Token(ch);
+                    }
                 }
-                else if (ch == '}')
+                return Number_Token(ch);
+            }
+            else if (char.IsLetter(ch) || ch == '_')
+            {
+                return Identifier_Token(ch);
+            }
+            return null;
+        }
+
+        protected virtual Token Comment_Token(char ch)
+        {
+            char next_ch = next_char1();
+            if (next_ch == '/')
+            {
+                skip_until('\n');
+                return end_token(TokenType.SINGLE_LINE_COMMENT);
+            }
+            else if (next_ch == '*')
+            {
+                skip_until("*/");
+                return end_token(TokenType.MULTI_LINE_COMMENT);
+            }
+            return null;
+        }
+
+        protected virtual Token String_Token(char start_ch)
+        {
+            //处理C语言转义字符
+            char prev_ch = EOF;
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
+            {
+                if (ch == start_ch && prev_ch != '\\')
                 {
-                    if (--level == 0) return end_token(TokenType.CodeBlock);
+                    read_char();
+                    return end_token(TokenType.STRING);
                 }
-                else if (ch == '/' && next_ch == '/')
-                {
-                    skip_until('\n');
-                }
-                else if (ch == '/' && next_ch == '*')
-                {
-                    skip_until("*/");
-                }
-                else if (ch == '\'') skip_string('\'');
-                else if (ch == '"') skip_string('"');
+                if (prev_ch == '\\') prev_ch = EOF;
+                else prev_ch = ch;
             }
             return end_token(TokenType.ERROR);
         }
 
-        Token string_token(char start_ch, bool process_escape=true)
+        protected virtual Token Identifier_Token(char cur_ch)
         {
-            return skip_string(start_ch, process_escape) ? end_token(TokenType.STRING) : end_token(TokenType.ERROR);
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
+            {
+                if (ch != '_' && !char.IsLetterOrDigit(ch))
+                {
+                    //if (is_delimitation_char(ch)) 
+                    break;
+                }
+            }
+            return end_token(TokenType.ID);
         }
 
-        Token hex_token()
+        protected virtual Token Hex_Token(char cur_ch)
         {
-            for (char ch = look_ahead(1); ch != EOF; read_char(), ch = look_ahead(1))
+            //if (cur_ch != 'x' && cur_ch != 'X') return null;
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
                 if (char.IsDigit(ch) || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))
                 {
                     continue;
                 }
-                else break;
+                else
+                {
+                    break;
+                }
             }
             return end_token(TokenType.NUM);
         }
 
-        Token number_token()
+        protected virtual Token Number_Token(char cur_ch)
         {
-            for (char ch = look_ahead(1); ch != EOF; read_char(), ch = look_ahead(1))
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
                 if (ch == '.')
                 {
-                    read_char();
-                    return float_token();
+                    ch = read_char();
+                    return Float_Token(ch);
                 }
-                if (!char.IsDigit(ch)) break;
+                if (!char.IsDigit(ch))
+                {
+                    break;
+                }
             }
             return end_token(TokenType.NUM);
         }
 
-        Token float_token()
+        protected virtual Token Float_Token(char cur_ch)
         {
-            for (char ch = look_ahead(1); ch != EOF; read_char(), ch = look_ahead(1))
+            //if (cur_ch != '.') return null;
+            for (char ch = peek_char(); ch != EOF; read_char(), ch = peek_char())
             {
-                if (!char.IsDigit(ch)) break;
+                if (!char.IsDigit(ch))
+                {
+                    break;
+                }
             }
             return end_token(TokenType.FLOAT);
         }
 
-        Token comment_token()
+        protected virtual void Log(string msg)
         {
-            return end_token(TokenType.STRING);
+            Console.WriteLine(msg);
         }
 
-        Token id_token()
+        protected void Log(Exception ex)
         {
-            for (char ch = look_ahead(1); ch != EOF; read_char(), ch = look_ahead(1))
-            {
-                if (ch != '_' && !char.IsLetterOrDigit(ch)) break;
-            }
-            return end_token(TokenType.ID);
+            Log(ex.Message);
         }
 
-        Token decl_token()
+        void Error(string errmsg)
         {
-            for (char ch = read_char(); ch != EOF; ch = read_char())
-            {
-                if ( ch == ' ' || ch =='\t')  break;
-            }
-            return end_token(TokenType.Decl);
+            string str = string.Format("[{0},{1}]:{2}", row + 1, col + 1, errmsg);
+            throw new ObjectDisposedException(str);
         }
 
-
-        Token next_token()
+        public Token next_token()
         {
-            skip_white_space();
-            cur_token = new Token(scan_line, scan_column, scan_offset);
-            char cur_ch = read_char();
-            char next_ch = next_char1();
-            switch (cur_ch)
+            try
             {
-                case '!'://0x21 exclamation mark 惊叹号
-                    break;
-                case '"'://0x22  double quotation marks 双引号
-                    return string_token(cur_ch);
-                case '#'://0x23  sharp
-                case '$'://0x24  dollar 
-                    break;
-                case '%'://0x25  percent
-                case '&'://0x26  and
-                case '\''://0x27  single quotation marks 单引号
-                case '('://0x28   parenthesis or round brackets 圆括号
-                case ')'://0x29   parenthesis or round brackets 圆括号
-                case '*'://0x2A   multiplied asterisk 星号
-                case '+'://0x2B   plus
-                case ','://0x2C   comma 逗号
-                case '-'://0x2D   minus 
-                case '.'://0x2E   period or full stop 句号
-                    break;
-                case '/'://0x2F divided slash or virgule or diagonal mark 斜线号
-                    if (next_ch == '/')
-                    {
-                        skip_line();
-                        return end_token(TokenType.SingleLineComment);
-                    }
-                    else if (next_ch == '*')
-                    {
-                        skip_until("*/");
-                        return end_token(TokenType.MultiLineComment);
-                    }
-                    break;
-                case ':'://0x3A colon 冒号
-                case ';'://0x3B semicolon 分号
-                case '<'://0x3C Angle brackets 尖括号
-                case '='://0x3D  is equal to 等于号
-                case '>'://0x3E Angle brackets 尖括号
-                case '?'://0x3F question mark 问号
-                case '@'://0x40  at 在
-                case '['://0x5B square brackets 方括号
-                case '\\'://0x5C backslash; trailing slash; bslash 反斜杠
-                case ']'://0x5D square brackets 方括号
-                case '^'://0x5E
-                case '_'://0x5F
-                case '`'://0x60
-                case '{'://0x7B curly brackets or braces 大括号
-                case '|'://0x7C
-                case '}'://0x7D curly brackets or braces 大括号
-                case '~'://0x7E
-                case ''://0x7F
-                    break;
-                default:
-                    if (cur_ch=='0')
-                    {
-                        if (next_ch == 'x' || next_ch == 'X')
-                        {
-                            return hex_token();
-                        }
-                        else return number_token();
-                    }
-                    else if (char.IsDigit(cur_ch))
-                    {
-                        return number_token();
-                    }
-                    if (cur_ch == '_' || char.IsLetter(cur_ch))
-                    {
-                        return id_token();
-                    }
-                    break;
-            }
-            return end_token((TokenType)cur_ch);
-        }
-
-        public void Parse()
-        {
-            ErrorMsg("arg0");
-            ErrorMsg("arg1 ={0}",1);
-            ErrorMsg("arg1 ={0} arg2 ={1}", 1,"two");
-            Parser parser = new Parser();
-            parser.state = ParserState.INITIALIZE;
-
-            skip_white_space();
-            for (char cur_ch = read_char(); cur_ch != EOF; skip_white_space(), cur_ch = read_char())
-            {
-                cur_token = new Token(scan_line, scan_column, scan_offset);
+                if (IgnoreSpaceToken) skip_white_space();
+                cur_token = new Token(row, col, offset);
+                char cur_ch = read_char();
+                if (cur_ch == EOF) return null;
                 char next_ch = next_char1();
-                if (cur_ch=='/' && next_ch == '/')
+                if (TokenHandlers.ContainsKey(cur_ch))
                 {
-                    skip_chars(2);
-                    skip_line();
-                    end_token(TokenType.SingleLineComment);
-                    continue;
+                    TokenHandler handler = TokenHandlers[cur_ch];
+                    Token tk = handler(cur_ch);
+                    if (tk != null) return tk;
                 }
-                else if (cur_ch == '/' && next_ch == '*')
+                if (DefaultTokenHandler != null)
                 {
-                    skip_chars(2);
-                    skip_until("*/");
-                    end_token(TokenType.MultiLineComment);
-                    continue;
+                    Token tk = DefaultTokenHandler(cur_ch);
+                    if (tk != null) return tk;
                 }
+                return end_token((TokenType)cur_ch);
+            }
+            catch(Exception ex)
+            {
+                Log(ex);
+            }
+            return null;
+        }
 
-                if (cur_ch == '"')
+        static public void EnumTokenType()
+        {
+            for (char ch = (char)0; ch < 0x7f; ch++)
+            {
+                if (ch < 0x20)
                 {
-                    skip_until('"');
+                    Console.WriteLine(string.Format("CHAR_0x{0:X2}=0x{0:X2},", (int)ch));
                 }
-                else if (cur_ch == '{')
-                {//潜入c#代码块
-                    int level = 1;
-                    for (char ch = read_char(); ch != EOF; ch = read_char())
-                    {
-                        next_ch = next_char1();
-                        if (ch == '{')
-                        {
-                            level++;
-                        }
-                        else if (ch == '}')
-                        {
-                            if (--level == 0) break;// return end_token(TokenType.CodeBlock);
-                        }
-                        else if (ch == '/' && next_ch == '/')
-                        {
-                            skip_until('\n');
-                        }
-                        else if (ch == '/' && next_ch == '*')
-                        {
-                            skip_until("*/");
-                        }
-                        else if (ch == '\'' || ch == '"') skip_string(ch, true);
-                    }
-                    end_token(TokenType.CodeBlock);
-                }
-                else if (char.IsLetterOrDigit(cur_ch) || cur_ch == '_')
+                else if (char.IsLetterOrDigit(ch))
                 {
-                    id_token();
-                }
-                else if (cur_ch == ':' && next_ch == ':' && next_char2() == '=')
-                {
-                    skip_chars(3);
-                    end_token(TokenType.ARROW);
-                }
-                else if ((cur_ch == '/' || cur_ch == '|') && char.IsLetterOrDigit(next_ch))
-                {
-
+                    Console.WriteLine(string.Format("CHAR_{1}=0x{0:X},//{1}", (int)ch, ch));
                 }
                 else
                 {
-                    end_token((TokenType)cur_ch);
+                    Console.WriteLine(string.Format("CHAR_0x{0:X}=0x{0:X},//{1}", (int)ch, ch));
                 }
-                ParserToken(parser);
             }
-            return;
-        }
-
-        void ErrorMsg(string format, params object[] args)
-        {
-            string errmsg = string.Format(format, args);
-            Console.WriteLine(errmsg);
-        }
-
-        Dictionary<string, Symbol> x2a = new Dictionary<string, Symbol>();
-
-        Symbol Symbol_new(string key)
-        {
-            Symbol symbol = null;
-            if (!x2a.ContainsKey(key))
-            {
-                symbol = new Symbol(key);
-            }
-            else symbol = x2a[key];
-            return symbol;
-        }
-
-        void ParserToken(Parser parser)
-        {
-
-            string x = cur_token.text;
-            switch(parser.state)
-            {
-                case ParserState.INITIALIZE:
-                case ParserState.WAITING_FOR_DECL_OR_RULE:
-                    if (parser.state == ParserState.INITIALIZE)
-                    {
-                        parser.prevrule = null;
-                        parser.preccounter = 0;
-                        parser.firstrule = parser.lastrule = null;
-                        parser.gp.nrule = 0;
-                    }
-                    if (x[0]=='%')
-                    {//定义
-                        parser.state = ParserState.WAITING_FOR_DECL_KEYWORD;
-                    }
-                    else if (char.IsLower(x[0]))
-                    {//非终结符
-                        parser.lhs = Symbol_new(x);
-                        parser.nrhs = 0;
-                        parser.lhsalias = null;
-                        parser.state = ParserState.WAITING_FOR_ARROW;
-                    }
-                    else if (x[0] == '{')
-                    {//c#代码块
-                        if (parser.prevrule == null)
-                        {
-                            ErrorMsg("There is no prior rule upon which to attach the code fragment which begins on this line.");
-                            parser.errorcnt++;
-                        }
-                        else if (parser.prevrule.code != null)
-                        {
-                            ErrorMsg("Code fragment beginning on this line is not the first to follow the previous rule.");
-                            parser.errorcnt++;
-                        }
-                        else
-                        {
-                            parser.prevrule.line = parser.tokenlineno;
-                            parser.prevrule.code = x;
-                            parser.prevrule.noCode = 0;
-                        }
-                    }
-                    else if (x[0] == '[')
-                    {//伪终结符开始
-                        parser.state = ParserState.PRECEDENCE_MARK_1;
-                    }
-                    else
-                    {
-                        ErrorMsg("Token \"{0}\" should be either \"%%\" or a nonterminal name.",x);
-                        parser.errorcnt++;
-                    }
-                    break;
-                
-                    
-                case ParserState.PRECEDENCE_MARK_1://伪终结符开始
-                    if (!char.IsUpper(x[0]))
-                    {//伪终结符首字母必须大写
-                        ErrorMsg("The precedence symbol must be a terminal.");
-                        parser.errorcnt++;
-                    }
-                    else if (parser.prevrule == null)
-                    {
-                        ErrorMsg("There is no prior rule to assign precedence \"[%s]\".", x);
-                        parser.errorcnt++;
-                    }
-                    else if (parser.prevrule.precsym != null)
-                    {
-                        ErrorMsg("Precedence mark on this line is not the first to follow the previous rule.");
-                        parser.errorcnt++;
-                    }
-                    else
-                    {
-                        parser.prevrule.precsym = Symbol_new(x);
-                    }
-                    parser.state = ParserState.PRECEDENCE_MARK_2;
-                    break;
- 
-                case ParserState.PRECEDENCE_MARK_2://伪终结符结束
-                    if (x[0] != ']')
-                    {
-                        ErrorMsg("Missing \"]\" on precedence mark.");
-                        parser.errorcnt++;
-                    }
-                    parser.state = ParserState.WAITING_FOR_DECL_OR_RULE;
-                    break;
-
-                case ParserState.WAITING_FOR_ARROW://产生式定义
-                    if (x[0] == ':' && x[1] == ':' && x[2] == '=')
-                    {
-                        parser.state = ParserState.IN_RHS;
-                    }
-                    else if (x[0] == '(')
-                    {
-                        parser.state = ParserState.LHS_ALIAS_1;
-                    }
-                    else
-                    {
-                        ErrorMsg("Expected to see a \":\" following the LHS symbol \"{0}\".", parser.lhs.name);
-                        parser.errorcnt++;
-                        parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
-                    }
-                    break;
-
-                case ParserState.LHS_ALIAS_1://左非终结符别名开始 Lhs (
-                    if (char.IsLetter(x[0]))
-                    {// Lhs (xxxxx
-                        parser.lhsalias = x;
-                        parser.state = ParserState.LHS_ALIAS_2;
-                    }
-                    else
-                    {
-                        ErrorMsg("\"{0}\" is not a valid alias for the LHS \"{1}\"\n", x, parser.lhs.name);
-                        parser.errorcnt++;
-                        parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
-                    }
-                    break;
-                case ParserState.LHS_ALIAS_2:
-                    if (x[0] == ')')
-                    {//左非终结符别名结束 Lhs (xxxxx) 
-                        parser.state = ParserState.LHS_ALIAS_3;
-                    }
-                    else
-                    {
-                        ErrorMsg("Missing \")\" following LHS alias name \"{0}\".", parser.lhsalias);
-                        parser.errorcnt++;
-                        parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
-                    }
-                    break;
-                case ParserState.LHS_ALIAS_3:
-                    if (x[0] == ':' && x[1] == ':' && x[2] == '=')
-                    {
-                        parser.state = ParserState.IN_RHS;
-                    }
-                    else
-                    {
-                        ErrorMsg("Missing \"->\" following: \"{0}({1})\".", parser.lhs.name, parser.lhsalias);
-                        parser.errorcnt++;
-                        parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
-                    }
-                    break;
-
-            }
-
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿	
+﻿
 		//Copyright (GPL) 2004 mchirico@users.sourceforge.net or mchirico@comcast.net
 
 /*
@@ -7,7 +7,7 @@
    
     $ ./lemon example1.y                          
 
-/*
+
   The above statement will create example1.c.
 
   The command below  adds  main and the
