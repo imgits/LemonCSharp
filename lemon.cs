@@ -173,7 +173,7 @@ namespace LemonCSharp
         public Rule nextlhs; // Next rule with the same LHS
         public Rule next; // Next rule in the global list
     }
-
+     
     public enum SymbolType
     {
         TERMINAL,
