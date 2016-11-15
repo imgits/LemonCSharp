@@ -30,6 +30,9 @@ namespace LemonCSharp
                     case TokenType.ID:
                         token = Production(token);
                         break;
+                    default:
+                        token = null;
+                        break;
                 }
                 if (token == null)
                 {
@@ -45,7 +48,7 @@ namespace LemonCSharp
 
         void  CheckToken(Token token, TokenType ttype)
         {
-            if (token.type != ttype)
+            if (!token.IsType(ttype))
             {
                 Error(token, "TokenType must be " + lexer.TokenName(ttype));
             }
@@ -53,29 +56,13 @@ namespace LemonCSharp
 
         void CheckToken(Token token, char ch)
         {
-            if ((int)token.type != (int)ch)
+            if (!token.IsType(ch))
             {
                 Error(token, "TokenType must be '" + ch + "'");
             }
         }
 
-        Symbol  AddSymbol(Token token)
-        {
-            Symbol symbol = null;
-            string key = token.text;
-            if (Symbols.ContainsKey(key))
-            {
-                symbol = Symbols[key];
-            }
-            else
-            {
-                symbol = new Symbol(key);
-                Symbols[key] = symbol;
-            }
-            return symbol;
-        }
-
-
+ 
         Token Define(Token define_token)
         {
             Token ret_token = null;
@@ -147,7 +134,7 @@ namespace LemonCSharp
                 if (token.type == TokenType.DOT) break;
                 else if (token.type == TokenType.ID && char.IsUpper(token.text[0]))
                 {//首字符大写，视为终结符
-                    Symbol symbol = AddSymbol(token);
+                    Symbol symbol = lemon.AddSymbol(token.text);
                     if (symbol.prec >= 0)
                     {
                         Error(token, "Symbol has already be given a precedence.");
@@ -170,30 +157,35 @@ namespace LemonCSharp
             {
                 Error(token, "Need more token");
             }
-            Rule rule = new Rule();
-            
+            Rule rule = lemon.AddRule();
             //产生式左部
-            Symbol symbol = AddSymbol(id_token);
+            Symbol symbol = lemon.AddSymbol(id_token.text);
+            string alias = null;
             if (token.IsType('('))
             {//产生式左部别名
-                SymbolAlias(symbol);
+                alias = SymbolAlias();
                 token = lexer.next_token();
             }
+            rule.lhs = new RuleItem(symbol, alias);
 
+            //::=
             CheckToken(token, TokenType.ARROW);
             
             //产生式右部
-            for (token = lexer.next_token();token!=null; token = lexer.next_token())
+            for (token = lexer.next_token();token!=null; )
             {
                 if (token.type == TokenType.DOT) break;
 
                 CheckToken(token, TokenType.ID);
+                symbol = lemon.AddSymbol(token.text);
 
-                symbol = AddSymbol(token);
+                token = lexer.next_token();
                 if (token.IsType('('))
                 {
-                    SymbolAlias(symbol);
+                    alias = SymbolAlias();
+                    token = lexer.next_token();
                 }
+                rule.rhs.Add(new RuleItem(symbol, alias));
             }
 
             token = lexer.next_token();
@@ -203,19 +195,27 @@ namespace LemonCSharp
             }
             if (token.IsType('['))
             {//伪优先级处理
-
+                token = lexer.next_token();
+                CheckToken(token, TokenType.ID);
+                token = lexer.next_token();
+                CheckToken(token, ']');
             }
             else if (token.IsType(TokenType.CODE_BLOCK))
             {//规则代码处理
 
             }
             else ret_token = token;
+
             return ret_token;
         }
 
-        void SymbolAlias(Symbol symbol)
+        string SymbolAlias()
         {
             Token token = lexer.next_token();
+            if (token ==null)
+            {
+                Error(null, "Need token Alias");
+            }
             if (token.type != TokenType.ID || !char.IsUpper(token.text[0]))
             {
                 Error(token, "This token must be an Alias");
@@ -223,7 +223,7 @@ namespace LemonCSharp
             string alias = token.text;
             token = lexer.next_token();
             CheckToken(token, ')');
-            symbol.Alias = alias;
+            return alias;
         }
     }
 }

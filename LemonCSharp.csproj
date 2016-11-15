@@ -45,7 +45,6 @@
   <ItemGroup>
     <None Include="calc.y" />
     <Content Include="lemon.c" />
-    <None Include="Lemon_csharp.cs" />
     <Compile Include="lemon.cs" />
     <Compile Include="Lexer.cs" />
     <Compile Include="Tokenizer.cs" />
