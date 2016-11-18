@@ -72,6 +72,17 @@ expr(A) ::= expr(B) DIVIDE expr(C).
 }  /* end of DIVIDE */
 
 expr(A) ::= INTEGER(B). { A = B; } 
+
+eax(A) ::= eax31_16 eax15_8 eax7_0.
+eax31_16 ::=INTEGER.
+eax31_16 ::=.
+eax15_8 ::=ah.
+eax7_0 ::=al.
+ah ::= AH.
+ah ::=.
+al ::= AL.
+al ::=.
+
 %code
 {
 int main()                                    

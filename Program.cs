@@ -59,9 +59,12 @@ namespace LemonCSharp
             SortSymbols();
             ShowSymbols();
             ShowRules();
+
+            FindFirstSets();
+            ShowFirstSets();
             return;
         }
-
+         
         void ShowSymbols()
         {
             int index = 0;
@@ -79,16 +82,16 @@ namespace LemonCSharp
             ShowLine("Rules:");
             foreach (Rule rule in Rules)
             {
-                if (rule.lhs.alias != null)
+                if (rule.left_alias != null)
                 {
-                    Show("{0} {1}({2}) ::= ", index, rule.lhs.symbol.name, rule.lhs.alias);
+                    Show("{0} {1}({2}) ::= ", index, rule.left.name, rule.left_alias);
                 }
-                else Show("{0} {1} ::= ", index, rule.lhs.symbol.name);
+                else Show("{0} {1} ::= ", index, rule.left.name);
 
-                foreach (RuleItem ri in rule.rhs)
+                for(int i = 0; i < rule.right.Count;i++)
                 {
-                    if (ri.alias == null) Show("{0} ", ri.symbol.name);
-                    else Show("{0}({1}) ", ri.symbol.name, ri.alias);
+                    if (rule.right_alais[i] == null) Show("{0} ", rule.right[i].name);
+                    else Show("{0}({1}) ", rule.right[i].name, rule.right_alais[i]);
                 }
                 if (rule.precsym !=null)
                 {
@@ -97,6 +100,22 @@ namespace LemonCSharp
                 else Show("\n");
                 index++;
                 
+            }
+        }
+
+        void ShowFirstSets()
+        {
+            HashSet<Symbol> left_symbols = new HashSet<Symbol>();
+            foreach(Rule rule in Rules)
+            {
+                if (!left_symbols.Add(rule.left)) continue;
+                Show("{0} ==> {{", rule.left.name);
+                foreach(Symbol symbol in rule.left.first)
+                {
+                    Show("{0},", symbol.name);
+                }
+                if (rule.left.HasEmpty) ShowLine(" empty}}");
+                else ShowLine(" }}");
             }
         }
 
@@ -154,10 +173,10 @@ namespace LemonCSharp
         {
             foreach (Rule rule in Rules)
             {
-                if (rule.precsym != null) continue;
-                foreach (RuleItem ri in rule.rhs)
+                if (rule.precedence != null) continue;
+                foreach (Symbol symbol in rule.right)
                 {
-                    if (ri.symbol.prec >= 0) rule.precsym = ri.symbol;
+                    if (symbol.prec >= 0) rule.precedence = symbol;
                 }
             }
         }
@@ -166,35 +185,35 @@ namespace LemonCSharp
         {
             foreach(Symbol symbol in Symbols)
             {
-                symbol.lambda = false;
+                symbol.HasEmpty = false;
+                if (symbol.IsTerminal) symbol.first.Add(symbol);
             }
 
-            for (int i = nterminal; i < Symbols.Count;i++)
+            foreach (Rule rule in Rules)
             {
-                Symbols[i].firstset = new bool[nterminal + 1];
+                if (rule.right.Count == 0) rule.left.HasEmpty = true;
             }
 
             bool progress = false;
+
             /* First compute all lambdas */
             do
             {
                 progress = false;
                 foreach (Rule rule in Rules)
                 {
-                    if (rule.lhs.symbol.lambda) continue;
+                    if (rule.left.HasEmpty) continue;
                     //假设右侧符号全都可以为空
-                    progress = true;
-                    rule.lhs.symbol.lambda = true;
-                    foreach (RuleItem ri in rule.rhs)
+                    rule.left.HasEmpty = true;
+                    foreach (Symbol symbol in rule.right)
                     {
-                        Symbol symbol = ri.symbol;
-                        if (!ri.symbol.lambda)
+                        if (!symbol.HasEmpty)
                         {
-                            progress = false;
-                            rule.lhs.symbol.lambda = false;
+                            rule.left.HasEmpty = false;
                             break;
                         }
                     }
+                    if (rule.left.HasEmpty) progress = true;
                 }
             }while (progress);
 
@@ -205,26 +224,23 @@ namespace LemonCSharp
                 progress = false;
                 foreach (Rule rule in Rules)
                 {
-                    s1 = rule.lhs.symbol;
-                    foreach (RuleItem ri in rule.rhs)
+                    s1 = rule.left;
+                    foreach (Symbol symbol in rule.right)
                     {
-                        s2 = ri.symbol;
+                        s2 = symbol;
                         if (s2.type == SymbolType.TERMINAL)
                         {
-                            progress = SetAdd(s1, s2);
+                            if (SetAdd(s1,s2)) progress=true;
                         }
-                        else if (s2.type == SymbolType.MULTITERMINAL)
-                        {
-
-                        }
+                        //else if (s2.type == SymbolType.MULTITERMINAL){}
                         else if (s1 == s2)
                         {
-                            if (!s1.lambda) break;
+                            if (!s1.HasEmpty) break;
                         }
                         else
                         {
-                            progress = SetUnion(s1,s2);
-                            if (!s2.lambda) break;
+                            if (SetUnion(s1, s2)) progress = true;
+                            if (!s2.HasEmpty) break;
                         }
                     }
                 }
@@ -233,22 +249,15 @@ namespace LemonCSharp
 
         bool SetAdd(Symbol s1, Symbol s2)
         {
-            bool rv = s1.firstset[s2.index];
-            s1.firstset[s2.index] = true;
-            return !rv;
+            return s1.first.Add(s2);
         }
 
         bool SetUnion(Symbol s1, Symbol s2)
         {
             bool progress = false;
-            for (int i = 0; i < nterminal + 1; i++)
+            foreach(Symbol symbol in s2.first)
             {
-                if (!s2.firstset[i]) continue;
-                if (!s1.firstset[i])
-                {
-                    s1.firstset[i] = true;
-                    progress = true;
-                }
+                if (s1.first.Add(symbol)) progress = true;
             }
             return progress;
         }

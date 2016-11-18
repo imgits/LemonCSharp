@@ -61,7 +61,6 @@ namespace LemonCSharp
                 Error(token, "TokenType must be '" + ch + "'");
             }
         }
-
  
         Token Define(Token define_token)
         {
@@ -166,7 +165,8 @@ namespace LemonCSharp
                 alias = SymbolAlias();
                 token = lexer.next_token();
             }
-            rule.lhs = new RuleItem(symbol, alias);
+            rule.left = symbol;
+            rule.left_alias= alias;
 
             //::=
             CheckToken(token, TokenType.ARROW);
@@ -185,7 +185,8 @@ namespace LemonCSharp
                     alias = SymbolAlias();
                     token = lexer.next_token();
                 }
-                rule.rhs.Add(new RuleItem(symbol, alias));
+                rule.right.Add(symbol);
+                rule.right_alais.Add(alias);
             }
 
             token = lexer.next_token();

@@ -266,7 +266,7 @@ struct symbol {
 	int prec;                /* Precedence if defined (-1 otherwise) */
 	enum e_assoc assoc;      /* Associativity if precedence is defined */
 	char *firstset;          /* First-set for all rules of this symbol */
-	Boolean lambda;          /* True if NT and can generate an empty string */
+	Boolean HasEmpty;          /* True if NT and can generate an empty string */
 	int useCnt;              /* Number of times used */
 	char *destructor;        /* Code which executes whenever this symbol is
 							 ** popped from the stack during error processing */
@@ -806,7 +806,7 @@ void FindFirstSets(struct lemon *lemp)
 	int progress;
 
 	for (i = 0; i<lemp->nsymbol; i++) {
-		lemp->symbols[i]->lambda = LEMON_FALSE;
+		lemp->symbols[i]->HasEmpty = LEMON_FALSE;
 	}
 	for (i = lemp->nterminal; i<lemp->nsymbol; i++) {
 		lemp->symbols[i]->firstset = SetNew();
@@ -816,14 +816,14 @@ void FindFirstSets(struct lemon *lemp)
 	do {
 		progress = 0;
 		for (rp = lemp->rule; rp; rp = rp->next) {
-			if (rp->lhs->lambda) continue;
+			if (rp->lhs->HasEmpty) continue;
 			for (i = 0; i<rp->nrhs; i++) {
 				struct symbol *sp = rp->rhs[i];
-				assert(sp->type == NONTERMINAL || sp->lambda == LEMON_FALSE);
-				if (sp->lambda == LEMON_FALSE) break;
+				assert(sp->type == NONTERMINAL || sp->HasEmpty == LEMON_FALSE);
+				if (sp->HasEmpty == LEMON_FALSE) break;
 			}
 			if (i == rp->nrhs) {
-				rp->lhs->lambda = LEMON_TRUE;
+				rp->lhs->HasEmpty = LEMON_TRUE;
 				progress = 1;
 			}
 		}
@@ -848,11 +848,11 @@ void FindFirstSets(struct lemon *lemp)
 					break;
 				}
 				else if (s1 == s2) {
-					if (s1->lambda == LEMON_FALSE) break;
+					if (s1->HasEmpty == LEMON_FALSE) break;
 				}
 				else {
 					progress += SetUnion(s1->firstset, s2->firstset);
-					if (s2->lambda == LEMON_FALSE) break;
+					if (s2->HasEmpty == LEMON_FALSE) break;
 				}
 			}
 		}
@@ -1414,7 +1414,7 @@ void Configlist_closure(struct lemon *lemp)
 					}
 					else {
 						SetUnion(newcfp->fws, xsp->firstset);
-						if (xsp->lambda == LEMON_FALSE) break;
+						if (xsp->HasEmpty == LEMON_FALSE) break;
 					}
 				}
 				if (i == rp->nrhs) Plink_add(&cfp->fplp, newcfp);
@@ -1702,7 +1702,7 @@ int main(int argc, char **argv)
 		/* Find the precedence for every production rule (that has one) */
 		FindRulePrecedences(&lem);
 
-		/* Compute the lambda-nonterminals and the first-sets for every
+		/* Compute the HasEmpty-nonterminals and the first-sets for every
 		** nonterminal */
 		FindFirstSets(&lem);
 
@@ -3366,8 +3366,8 @@ void ReportOutput(struct lemon *lemp)
 		fprintf(fp, "  %3d: %s", i, sp->name);
 		if (sp->type == NONTERMINAL) {
 			fprintf(fp, ":");
-			if (sp->lambda) {
-				fprintf(fp, " <lambda>");
+			if (sp->HasEmpty) {
+				fprintf(fp, " <HasEmpty>");
 			}
 			for (j = 0; j<lemp->nterminal; j++) {
 				if (sp->firstset && SetFind(sp->firstset, j)) {
@@ -5116,7 +5116,7 @@ struct symbol *Symbol_new(const char *x)
 		sp->prec = -1;
 		sp->assoc = UNK;
 		sp->firstset = 0;
-		sp->lambda = LEMON_FALSE;
+		sp->HasEmpty = LEMON_FALSE;
 		sp->destructor = 0;
 		sp->destLineno = 0;
 		sp->datatype = 0;

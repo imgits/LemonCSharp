@@ -469,7 +469,7 @@ namespace LemonCSharp
                     }
                     else if (char.IsLower(x[0]))
                     {//非终结符
-                        parser.lhs = Symbol_new(x);
+                        parser.left = Symbol_new(x);
                         parser.nrhs = 0;
                         parser.lhsalias = null;
                         parser.state = ParserState.WAITING_FOR_ARROW;
@@ -548,7 +548,7 @@ namespace LemonCSharp
                     }
                     else
                     {
-                        ErrorMsg("Expected to see a \":\" following the LHS symbol \"{0}\".", parser.lhs.name);
+                        ErrorMsg("Expected to see a \":\" following the LHS symbol \"{0}\".", parser.left.name);
                         parser.errorcnt++;
                         parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
                     }
@@ -562,7 +562,7 @@ namespace LemonCSharp
                     }
                     else
                     {
-                        ErrorMsg("\"{0}\" is not a valid alias for the LHS \"{1}\"\n", x, parser.lhs.name);
+                        ErrorMsg("\"{0}\" is not a valid alias for the LHS \"{1}\"\n", x, parser.left.name);
                         parser.errorcnt++;
                         parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
                     }
@@ -586,7 +586,7 @@ namespace LemonCSharp
                     }
                     else
                     {
-                        ErrorMsg("Missing \"->\" following: \"{0}({1})\".", parser.lhs.name, parser.lhsalias);
+                        ErrorMsg("Missing \"->\" following: \"{0}({1})\".", parser.left.name, parser.lhsalias);
                         parser.errorcnt++;
                         parser.state = ParserState.RESYNC_AFTER_RULE_ERROR;
                     }

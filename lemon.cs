@@ -123,8 +123,7 @@ namespace LemonCSharp
         WAITING_FOR_CLASS_TOKEN
     }
 
-
-    public class Parser1
+    public class Lemon_Parser
     {
         public string filename; // Name of the input file
         public int tokenlineno; // Linenumber at which current token starts
@@ -150,39 +149,32 @@ namespace LemonCSharp
         public Rule lastrule; // Pointer to the most recently parsed rule
     }
 
-    public class RuleItem
-    {
-        public Symbol symbol;
-        public string alias;
-        public RuleItem(Symbol symbol, string alias)
-        {
-            this.symbol = symbol;
-            this.alias = alias;
-        }
-    }
-
-    public class RuleSymbol
-    {
-        public Symbol symbol;
-        public string alias;
-        public RuleSymbol(Symbol symbol, string alias)
-        {
-            this.symbol = symbol;
-            this.alias = alias;
-        }
-    }
+    //public class RuleItem
+    //{
+    //    public Symbol symbol;
+    //    public string alias;
+    //    public RuleItem(Symbol symbol, string alias)
+    //    {
+    //        this.symbol = symbol;
+    //        this.alias = alias;
+    //    }
+    //}
 
     public class Rule
     {
-        public RuleSymbol Left;
-        public List<RuleSymbol> Rights = new List<RuleSymbol>();
-        public Symbol Precedence;
+        public Symbol left;
+        public string left_alias;
 
-        public RuleItem lhs; // Left-hand side of the rule
+        public List<Symbol> right = new List<Symbol>();
+        public List<string> right_alais = new List<string>();
+
+        public Symbol precedence;
+
+        //public RuleItem lhs; // Left-hand side of the rule
         public int lhsStart; // True if left-hand side is the start symbol
         public int ruleline; // Line number for the rule
         public int nrhs; // Number of RHS symbols
-        public List<RuleItem> rhs=new List<RuleItem>(); // The RHS symbols
+        //public List<RuleItem> rhs=new List<RuleItem>(); // The RHS symbols
         public int line; // Line number at which code begins
         public string code; // The code executed when this rule is reduced
         public string codePrefix; // Setup code before code[] above
@@ -221,8 +213,12 @@ namespace LemonCSharp
         public Symbol fallback; // fallback token in case this token doesn't parse
         public int prec; // Precedence if defined (-1 otherwise)
         public Assoc assoc; // Associativity if precedence is defined
-        public bool[] firstset; // First-set for all rules of this symbol
-        public Boolean lambda; // True if NT and can generate an empty string
+        //public bool[] firstset; // First-set for all rules of this symbol
+        public HashSet<Symbol> first= new HashSet<Symbol>();
+
+        //public Boolean HasEmpty; // True if NT and can generate an empty string
+        public bool HasEmpty { get; set; }
+        public bool IsTerminal { get { return type == SymbolType.TERMINAL; } }
         public int useCnt; // Number of times used
         public string destructor; /* Code which executes whenever this symbol is
 							 ** popped from the stack during error processing */
